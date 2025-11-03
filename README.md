@@ -1,78 +1,137 @@
-<!-- This is a comment in Markdown 
+<p align="center">
+  <img src="https://ssv.network/wp-content/uploads/2024/06/full_logo_white.svg" alt="SSV Network" width="300"/>
+</p>
 
-🛠 Repository Setup Instructions
+<h1 align="center">Compose SDK</h1>
 
-After forking or cloning this template, run the following:
+<p align="center">
+  <a href="https://codecov.io/gh/ssvlabs/ssv-sdk">
+    <img src="https://codecov.io/gh/ssvlabs/ssv-sdk/graph/badge.svg?token=2j2HCF1fSb" alt="codecov"/>
+  </a>
+</p>
 
-1. Replace all occurrences of 'template-repository' with your actual repo name:
-   sed -i 's/template-repository/your-repo-name/g' README.md
+> **⚠️ Development Notice**: This SDK is currently under active development and testing. It is not recommended for production use at this time. For updates and documentation, please refer to our [official documentation](https://docs.ssv.network).
 
-2. Fill in all TODO sections below.
+## Overview
 
-3. Update [.github/CODEOWNERS](.github/CODEOWNERS) to reflect your team or maintainers.
+The Compose SDK is a TypeScript library for interacting with the SSV network, enabling distributed validator operations on Ethereum.
 
-4. Check `.gitignore` and `.dockerignore` files and modify them according to your project's structure.
+## Core Modules
 
-5. Update GitHub Actions in `.github/workflows/` if needed (e.g., rename, add secrets).
+The SDK consists of four main modules:
 
--->
-<p align="center"><img src="https://framerusercontent.com/images/9FedKxMYLZKR9fxBCYj90z78.png?scale-down-to=512&width=893&height=363" alt="SSV Network"></p>
+- **Clusters**: Manage validator clusters, handle deposits, and register validators
+- **Operators**: Interact with network operators and manage operator relationships
+- **API**: Access network data, query states, and retrieve operational information
+- **Utils**: Helper functions for keyshare validation, share generation, and other utilities
 
-<img src="https://github.com/ssvlabs/template-repository/actions/workflows/main.yml/badge.svg" alt="Check" />
-<a href="https://discord.com/invite/ssvnetworkofficial"><img src="https://img.shields.io/badge/discord-%23ssvlabs-8A2BE2.svg" alt="Discord" /></a>
-
-## ✨ Introduction
-
-<!-- Describe the purpose of this repository. -->
-This project provides a foundational structure for [describe your use case: e.g., smart contracts, node operators, CLI tools].
-
-## ⚙️  How to Build
-
-```bash
-# Clone the repo
-git clone https://github.com/compose-network/template-repository.git
-
-# Navigate
-cd your-repo-name
-
-# Install dependencies
-TODO
-
-# Build the code
-TODO
-```
-
-
-## 🚀 How to Run
-
+## Installation
 
 ```bash
-# Run the main service
-npm start
-# or
-go run main.go
-# or
-python app.py
+# Using npm
+npm i @ssv-labs/ssv-sdk
+
+# Using yarn
+yarn add @ssv-labs/ssv-sdk
+
+# Using pnpm
+pnpm install @ssv-labs/ssv-sdk
 ```
 
-## 🧪 Testing
+## Quick Start
 
-```bash
-npm test
-# or
-go test ./...
-# or
-pytest
+### Initialize the SDK
+
+```typescript
+import { SSVSDK, chains } from '@ssv-labs/ssv-sdk'
+import { createPublicClient, createWalletClient, http } from 'viem'
+import { privateKeyToAccount } from 'viem/accounts'
+
+const chain = chains.mainnet // or chains.holesky
+const transport = http()
+
+const publicClient = createPublicClient({
+  chain,
+  transport,
+})
+
+const account = privateKeyToAccount('0x...')
+const walletClient = createWalletClient({
+  account,
+  chain,
+  transport,
+})
+
+const sdk = new SSVSDK({
+  publicClient,
+  walletClient,
+})
 ```
 
+### API Examples
 
-## Contributing
+```typescript
+// Query operators
+const operators = await sdk.api.getOperators({
+  operatorIds: ['220', '221', '223', '224'],
+})
 
-We welcome community contributions!
+// Get owner nonce
+const nonce = await sdk.api.getOwnerNonce({
+  owner: 'your_wallet_address',
+})
+```
 
-- See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-- Create a branch, push your changes, and open a PR.
+### Cluster Management
 
-## License
+```typescript
+import { parseEther } from 'viem'
 
-Repository is distributed under [GPL-3.0](LICENSE).
+// Deposit to cluster
+await sdk.clusters.deposit(
+  {
+    id: 'your_cluster_id',
+    amount: parseEther('30'),
+  },
+  {
+    approve: true, // Auto-approve token if needed
+  },
+)
+```
+
+### Register Validators
+To register validators, you'll need to:
+
+1. Create shares from your keyshares JSON file
+2. Register the validator using the created shares
+```typescript
+import { parseEther } from 'viem'
+
+// Your keyshares JSON file containing the validator's data
+import keyshares from 'path/to/keyshares.json'
+
+// First, validate and create shares from your keyshares
+try {
+  const result = await sdk.utils.validateSharesPreRegistration({
+    operatorIds: ['220', '221', '223', '224'],
+    keyshares,
+  })
+
+  // Register validators using the clusters API
+  const receipt = await sdk.clusters
+    .registerValidators({
+      args: {
+        keyshares: result.available,
+        depositAmount: parseEther('2'),
+      },
+    })
+    .then((tx) => tx.wait())
+} catch (e) {
+  // something went wrong
+}
+```
+
+## Documentation
+
+For detailed documentation and examples, visit our [official documentation](https://docs.ssv.network).
+# compose-sdk
