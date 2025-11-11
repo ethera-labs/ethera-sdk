@@ -1,8 +1,8 @@
 "use client";
 
-import { hexToBytes, type Hex } from "viem";
 import type { INamespace } from "protobufjs/light";
 import protobuf from "protobufjs/light";
+import { hexToBytes, type Hex } from "viem";
 
 // Minimal protobuf schema for the messages we need
 const rootJson = {
@@ -64,7 +64,6 @@ export function encodeXtMessage(params: {
     sender_id: params.senderId ?? "client",
     xt_request: xt,
   });
-  console.log("msg:", msg);
   const bytes = Message.encode(msg).finish();
   // return btoa(String.fromCharCode(...bytes));
   return ("0x" + bytesToHex(bytes)) as Hex;

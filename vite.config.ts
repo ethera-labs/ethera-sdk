@@ -1,8 +1,9 @@
 import { resolve } from 'path';
 import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
+import { nodePolyfills } from "vite-plugin-node-polyfills";
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [
     dts({
       include: ['src/**/*.ts', 'src/**/*.tsx'],
@@ -11,6 +12,11 @@ export default defineConfig({
       outDir: 'dist',
       entryRoot: 'src',
       tsconfigPath: './tsconfig.json'
+    }),
+    nodePolyfills({
+      globals: {
+        Buffer: mode === 'production'
+      }
     })
   ],
   resolve: {
@@ -30,15 +36,7 @@ export default defineConfig({
       formats: ['es', 'cjs']
     },
     rollupOptions: {
-      external: [
-        'react',
-        'react-dom',
-        'react/jsx-runtime',
-        'wagmi',
-        '@wagmi/core',
-        '@tanstack/react-query',
-        'viem',
-      ],
+      external: ['react', 'react-dom', 'react/jsx-runtime', 'wagmi', '@wagmi/core', '@tanstack/react-query', 'viem'],
       output: [
         {
           format: 'es',
@@ -51,6 +49,5 @@ export default defineConfig({
       ]
     },
     outDir: 'dist'
-  },
-
-});
+  }
+}));

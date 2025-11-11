@@ -76,7 +76,6 @@ export const getPaymasterDataForChain = async ({
       }
     )
     .then((res) => {
-      console.log('Paymaster response', res);
       return {
         ...res.result,
         paymasterPostOpGasLimit: BigInt(res.result?.paymasterPostOpGasLimit || '0'),

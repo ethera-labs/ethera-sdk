@@ -1,5 +1,6 @@
 import { entryPointV07 } from '@/config';
 import type { ComposeConfigReturnType } from '@/config/create';
+import type { UserOPCall } from '@/utils/user-operations';
 import { createUserOps } from '@/utils/user-operations';
 import { toMultiChainECDSAValidator } from '@zerodev/multi-chain-ecdsa-validator';
 import type { KernelSmartAccountImplementation } from '@zerodev/sdk';
@@ -33,11 +34,18 @@ export const createSmartAccount = async (
     factoryAddress: config.accountAbstractionContracts?.[chainId]?.kernelFactory,
     useMetaFactory: false
   });
+  const boundCreateUserOps = createUserOps.bind(null, config, kernelAccount);
   return {
     validator: validator,
     account: {
       ...kernelAccount,
-      createUserOp: createUserOps.bind(null, config, kernelAccount)
+      createUserOp: async (calls: UserOPCall[]) => ({
+        account: kernelAccount,
+        signer,
+        chainId,
+        publicClient,
+        userOp: await boundCreateUserOps(calls)
+      })
     },
     signer,
     publicClient

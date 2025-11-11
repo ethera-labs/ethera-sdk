@@ -16,7 +16,6 @@ export function toRpcUserOpCanonical(op: PrepareUserOperationReturnType) {
           ])
         : '0x';
 
-  console.log('initCode:', initCode);
 
   return {
     sender: op.sender,
