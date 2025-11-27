@@ -37,7 +37,8 @@ export function createComposeConfig<TConfig extends Config>(
 ): ComposeConfigReturnType<TConfig> {
   return {
     getPaymasterEndpoint: props.getPaymasterEndpoint,
-    getPublicClient: (chainId) => getPublicClient(props.wagmi, { chainId }) as unknown as PublicClient<Transport, Chain, Account, ComposeRpcSchema>,
+    getPublicClient: (chainId) =>
+      getPublicClient(props.wagmi, { chainId }) as unknown as PublicClient<Transport, Chain, Account, ComposeRpcSchema>,
     accountAbstractionContracts: props.accountAbstractionContracts,
     hasPaymaster: Boolean(props.getPaymasterEndpoint),
     entryPoint: entryPointV07

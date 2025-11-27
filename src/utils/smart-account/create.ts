@@ -3,10 +3,12 @@ import type { ComposeConfigReturnType } from '@/config/create';
 import type { UserOPCall } from '@/utils/user-operations';
 import { createUserOps } from '@/utils/user-operations';
 import { toMultiChainECDSAValidator } from '@zerodev/multi-chain-ecdsa-validator';
-import type { KernelSmartAccountImplementation } from '@zerodev/sdk';
+import type { CreateKernelAccountReturnType, KernelSmartAccountImplementation } from '@zerodev/sdk';
 import { createKernelAccount } from '@zerodev/sdk';
 import { KERNEL_V3_1 } from '@zerodev/sdk/constants';
-import type { Signer } from '@zerodev/sdk/types';
+import type { KernelValidator, Signer } from '@zerodev/sdk/types';
+import type { Account, Chain, PublicClient, Transport } from 'viem';
+import type { ComposeRpcSchema } from '@/types/compose';
 
 type Props = {
   chainId: number;
@@ -14,10 +16,25 @@ type Props = {
   signer: Signer;
 };
 
+export interface CreateSmartAccountReturnType {
+  validator: KernelValidator<'MultiChainECDSAValidator'>;
+  account: CreateKernelAccountReturnType & {
+    createUserOp: (calls: UserOPCall[]) => Promise<{
+      account: CreateKernelAccountReturnType;
+      signer: Signer;
+      chainId: number;
+      publicClient: PublicClient<Transport, Chain, Account, ComposeRpcSchema>;
+      userOp: Awaited<ReturnType<typeof createUserOps>>;
+    }>;
+  };
+  signer: Signer;
+  publicClient: PublicClient<Transport, Chain, Account, ComposeRpcSchema>;
+}
+
 export const createSmartAccount = async (
   { signer, chainId, multiChainIds = [] }: Props,
   config: ComposeConfigReturnType
-) => {
+): Promise<CreateSmartAccountReturnType> => {
   const publicClient = config.getPublicClient(chainId);
   const validator = await toMultiChainECDSAValidator(publicClient!, {
     entryPoint: config.entryPoint,
