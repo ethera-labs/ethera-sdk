@@ -49,10 +49,6 @@ export const getPaymasterDataForChain = async ({
     paymasterVerificationGasLimit: hexify(params.paymasterVerificationGasLimit || 0)
   };
 
-  if (!import.meta.env.VITE_PAYMASTER_URL) {
-    throw new Error('VITE_PAYMASTER_URL is not set - Paymaster Service URL - set it in .env to support paymaster');
-  }
-
   const paymasterParams = [userOpOnly, params.entryPointAddress];
 
   if (method !== 'pm_sponsorUserOperation') {
@@ -66,13 +62,12 @@ export const getPaymasterDataForChain = async ({
         jsonrpc: '2.0',
         id: 1,
         method,
-        params: paymasterParams
+        params: stringifyBigints(paymasterParams)
       },
       {
         headers: {
           'Content-Type': 'application/json'
-        },
-        transformRequest: [stringifyBigints]
+        }
       }
     )
     .then((res) => {
