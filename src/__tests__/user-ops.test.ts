@@ -2,7 +2,7 @@ import { rollupA, rollupB } from '@/config/chains';
 import { createComposeConfig } from '@/config/create';
 import { composeRollupsContracts, rollupsAccountAbstractionContracts } from '@/config/defaults';
 import type { ComposeRpcSchema } from '@/types/compose';
-import { composeUnsignedUserOps, createAbiEncoder } from '@/utils';
+import { composeUnpreparedUserOps, createAbiEncoder } from '@/utils';
 import { createSmartAccount } from '@/utils/smart-account/create';
 import { createConfig, http } from '@wagmi/core';
 import { createPublicClient, erc20Abi, rpcSchema } from 'viem';
@@ -85,7 +85,7 @@ describe('createComposeConfig initialization', () => {
     expect(userOpA.account.address).toBe(smartAccountA.account?.address);
     expect(userOpB.account.address).toBe(smartAccountB.account?.address);
 
-    const data = await composeUnsignedUserOps([
+    const data = await composeUnpreparedUserOps([
       {
         account: smartAccountA.account,
         publicClient: smartAccountA.publicClient,

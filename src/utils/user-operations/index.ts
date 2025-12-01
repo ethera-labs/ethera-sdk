@@ -108,20 +108,20 @@ export const createUserOps = async (
 
 export type CreateUserOPReturnType = Awaited<ReturnType<typeof createUserOps>>;
 
-type ComposeUnsignedUserOpsParams = {
+type ComposeUnpreparedUserOpsParams = {
   account: CreateKernelAccountReturnType<'0.7'>;
   publicClient: PublicClient<Transport, Chain, Account, ComposeRpcSchema>;
   userOp: CreateUserOPReturnType;
 }[];
 
-type ComposeUserOpsOptions = {
+export type ComposeUserOpsOptions = {
   onSigned?: (signedOps: ReturnType<typeof toRpcUserOpCanonical>[]) => void;
   onComposed?: (builds: ComposedSignedUserOpsTxReturnType[], explorerUrls: string[]) => void;
   onPayloadEncoded?: (payload: Hex) => void;
 };
 
-export const composeUnsignedUserOps = async (
-  operations: ComposeUnsignedUserOpsParams,
+export const composeUnpreparedUserOps = async (
+  operations: ComposeUnpreparedUserOpsParams,
   options: ComposeUserOpsOptions = {}
 ) => {
   const signedCanonicalOps = (
@@ -133,20 +133,20 @@ export const composeUnsignedUserOps = async (
 
   options.onSigned?.(signedCanonicalOps);
 
-  return composeReadyUserOps(
+  return composeSignedUserOps(
     operations.map((op, i) => ({ ...op, signedCanonicalOps: signedCanonicalOps[i] })),
     options
   );
 };
 
-type ComposeSignedUserOpsParams = {
+type ComposePreparedUserOpsParams = {
   account: CreateKernelAccountReturnType<'0.7'>;
   publicClient: PublicClient<Transport, Chain, Account, ComposeRpcSchema>;
   userOp: PrepareUserOperationReturnType;
 }[];
 
-export const composeSignedUserOps = async (
-  operations: ComposeSignedUserOpsParams,
+export const composePreparedUserOps = async (
+  operations: ComposePreparedUserOpsParams,
   options: ComposeUserOpsOptions = {}
 ) => {
   const unsignedUserOps = operations.map((op) => op.userOp);
@@ -162,19 +162,19 @@ export const composeSignedUserOps = async (
 
   options.onSigned?.(signedCanonicalOps);
 
-  return composeReadyUserOps(
+  return composeSignedUserOps(
     operations.map((op, i) => ({ ...op, signedCanonicalOps: signedCanonicalOps[i] })),
     options
   );
 };
 
-export type composeReadyUserOpsParams = {
+export type composeSignedUserOpsParams = {
   signedCanonicalOps: ReturnType<typeof toRpcUserOpCanonical>;
   publicClient: PublicClient<Transport, Chain, Account, ComposeRpcSchema>;
 }[];
 
-export const composeReadyUserOps = async (
-  operations: composeReadyUserOpsParams,
+export const composeSignedUserOps = async (
+  operations: composeSignedUserOpsParams,
   options: ComposeUserOpsOptions = {}
 ) => {
   const builds = await Promise.all(

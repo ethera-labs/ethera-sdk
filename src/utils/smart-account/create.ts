@@ -16,17 +16,19 @@ type Props = {
   signer: Signer;
 };
 
+export type ComposeSmartAccount = CreateKernelAccountReturnType & {
+  createUserOp: (calls: UserOPCall[]) => Promise<{
+    account: CreateKernelAccountReturnType;
+    signer: Signer;
+    chainId: number;
+    publicClient: PublicClient<Transport, Chain, Account, ComposeRpcSchema>;
+    userOp: Awaited<ReturnType<typeof createUserOps>>;
+  }>;
+};
+
 export interface CreateSmartAccountReturnType {
   validator: KernelValidator<'MultiChainECDSAValidator'>;
-  account: CreateKernelAccountReturnType & {
-    createUserOp: (calls: UserOPCall[]) => Promise<{
-      account: CreateKernelAccountReturnType;
-      signer: Signer;
-      chainId: number;
-      publicClient: PublicClient<Transport, Chain, Account, ComposeRpcSchema>;
-      userOp: Awaited<ReturnType<typeof createUserOps>>;
-    }>;
-  };
+  account: ComposeSmartAccount;
   signer: Signer;
   publicClient: PublicClient<Transport, Chain, Account, ComposeRpcSchema>;
 }
