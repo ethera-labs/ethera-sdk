@@ -4,20 +4,22 @@ import type { ComposeRpcSchema } from '@/types/compose';
 import {
   composePreparedUserOps,
   composeSignedUserOps,
+  type composeSignedUserOpsParams,
   composeUnpreparedUserOps,
-  createUserOps,
-  type UserOPCall,
   type CreateUserOPReturnType,
-  type composeSignedUserOpsParams
+  createUserOps,
+  type UserOPCall
 } from '@/utils/user-operations';
 import type { CreateKernelAccountReturnType } from '@zerodev/sdk';
-import { prepareAndSignUserOperations, signUserOperations, type SignUserOperationsRequest } from '@zerodev/multi-chain-ecdsa-validator';
-import type { Chain, Client, PublicClient, Transport } from 'viem';
-import type { Hex } from 'viem';
+import {
+  prepareAndSignUserOperations,
+  signUserOperations,
+  type SignUserOperationsRequest
+} from '@zerodev/multi-chain-ecdsa-validator';
+import type { Address, Chain, Client, Hex, PublicClient, Transport } from 'viem';
 import { encodeXtMessage, toRpcUserOpCanonical } from '@/main';
-import type { SmartAccount, GetPaymasterDataParameters } from 'viem/account-abstraction';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
-import type { Address } from 'viem';
+import type { GetPaymasterDataParameters, SmartAccount } from 'viem/account-abstraction';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@zerodev/multi-chain-ecdsa-validator', () => ({
   prepareAndSignUserOperations: vi.fn(),
@@ -157,7 +159,9 @@ describe('createUserOps', () => {
       preVerificationGas: 1n
     } as unknown as GetPaymasterDataParameters;
 
-    const calls: UserOPCall[] = [{ to: '0x0000000000000000000000000000000000000005' as Address, value: 0n, data: '0x' as Hex }];
+    const calls: UserOPCall[] = [
+      { to: '0x0000000000000000000000000000000000000005' as Address, value: 0n, data: '0x' as Hex }
+    ];
 
     const paymasterReturn = {
       paymaster: '0xpaymaster',
@@ -199,7 +203,10 @@ describe('compose user operations', () => {
     (publicClientA.request as unknown as ReturnType<typeof vi.fn>)
       .mockResolvedValueOnce({ hash: '0xhash1', raw: '0xraw1' })
       .mockResolvedValueOnce(undefined);
-    (publicClientB.request as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ hash: '0xhash2', raw: '0xraw2' });
+    (publicClientB.request as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      hash: '0xhash2',
+      raw: '0xraw2'
+    });
 
     return {
       publicClientA,
@@ -239,21 +246,24 @@ describe('compose user operations', () => {
 
   it('signs and composes unprepared user operations', async () => {
     const { publicClientA, publicClientB, operations } = buildOperationsForCompose();
-    (prepareAndSignUserOperations as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([{ sig: 'a' }, { sig: 'b' }]);
+    (prepareAndSignUserOperations as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { sig: 'a' },
+      { sig: 'b' }
+    ]);
     const onSigned = vi.fn();
     const onComposed = vi.fn();
 
     const result = await composeUnpreparedUserOps(operations, { onSigned, onComposed });
 
     expect(prepareAndSignUserOperations).toHaveBeenCalledWith(
-      [publicClientA as unknown as Client<Transport, Chain, SmartAccount>, publicClientB as unknown as Client<Transport, Chain, SmartAccount>],
+      [
+        publicClientA as unknown as Client<Transport, Chain, SmartAccount>,
+        publicClientB as unknown as Client<Transport, Chain, SmartAccount>
+      ],
       [operations[0].userOp, operations[1].userOp]
     );
     expect(toRpcUserOpCanonical).toHaveBeenCalledTimes(2);
-    expect(onSigned).toHaveBeenCalledWith([
-      createCanonical('a'),
-      createCanonical('b')
-    ]);
+    expect(onSigned).toHaveBeenCalledWith([createCanonical('a'), createCanonical('b')]);
 
     expect(publicClientA.request).toHaveBeenCalledWith({
       method: 'compose_buildSignedUserOpsTx',
@@ -265,7 +275,10 @@ describe('compose user operations', () => {
     });
 
     expect(onComposed).toHaveBeenCalledWith(
-      [{ hash: '0xhash1', raw: '0xraw1' }, { hash: '0xhash2', raw: '0xraw2' }],
+      [
+        { hash: '0xhash1', raw: '0xraw1' },
+        { hash: '0xhash2', raw: '0xraw2' }
+      ],
       ['https://explorer.a/tx/0xhash1', 'https://explorer.b/tx/0xhash2']
     );
     expect(result.payload).toBe('0xencoded');
@@ -318,10 +331,7 @@ describe('compose user operations', () => {
       userOperations: [preparedOperations[0].userOp, preparedOperations[1].userOp],
       account: preparedOperations[0].account
     });
-    expect(onSigned).toHaveBeenCalledWith([
-      createCanonical('a'),
-      createCanonical('b')
-    ]);
+    expect(onSigned).toHaveBeenCalledWith([createCanonical('a'), createCanonical('b')]);
     expect(publicClientA.request).toHaveBeenCalledWith({
       method: 'compose_buildSignedUserOpsTx',
       params: [[createCanonical('a')], { chainId: 1 }]
@@ -339,7 +349,10 @@ describe('compose user operations', () => {
     (publicClientA.request as unknown as ReturnType<typeof vi.fn>)
       .mockResolvedValueOnce({ hash: '0xhash1', raw: '0xraw1' })
       .mockResolvedValueOnce(undefined);
-    (publicClientB.request as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ hash: '0xhash2', raw: '0xraw2' });
+    (publicClientB.request as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      hash: '0xhash2',
+      raw: '0xraw2'
+    });
 
     const operations = [
       { publicClient: publicClientA, signedCanonicalOps: createCanonical('a') },
@@ -360,7 +373,10 @@ describe('compose user operations', () => {
     expect(result.payload).toBe('0xencoded');
     expect(result.explorerUrls).toEqual(['https://explorer.a/tx/0xhash1', 'https://explorer.b/tx/0xhash2']);
     expect(onComposed).toHaveBeenCalledWith(
-      [{ hash: '0xhash1', raw: '0xraw1' }, { hash: '0xhash2', raw: '0xraw2' }],
+      [
+        { hash: '0xhash1', raw: '0xraw1' },
+        { hash: '0xhash2', raw: '0xraw2' }
+      ],
       ['https://explorer.a/tx/0xhash1', 'https://explorer.b/tx/0xhash2']
     );
 
