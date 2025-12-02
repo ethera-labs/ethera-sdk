@@ -7,8 +7,9 @@ import type { CreateKernelAccountReturnType, KernelSmartAccountImplementation } 
 import { createKernelAccount } from '@zerodev/sdk';
 import { KERNEL_V3_1 } from '@zerodev/sdk/constants';
 import type { KernelValidator, Signer } from '@zerodev/sdk/types';
-import type { Account, Chain, PublicClient, Transport } from 'viem';
+import type { Chain, PublicClient, Transport } from 'viem';
 import type { ComposeRpcSchema } from '@/types/compose';
+import type { SmartAccount } from 'viem/account-abstraction';
 
 type Props = {
   chainId: number;
@@ -21,7 +22,7 @@ export type ComposeSmartAccount = CreateKernelAccountReturnType & {
     account: CreateKernelAccountReturnType;
     signer: Signer;
     chainId: number;
-    publicClient: PublicClient<Transport, Chain, Account, ComposeRpcSchema>;
+    publicClient: PublicClient<Transport, Chain, SmartAccount, ComposeRpcSchema>;
     userOp: Awaited<ReturnType<typeof createUserOps>>;
   }>;
 };
@@ -30,7 +31,7 @@ export interface CreateSmartAccountReturnType {
   validator: KernelValidator<'MultiChainECDSAValidator'>;
   account: ComposeSmartAccount;
   signer: Signer;
-  publicClient: PublicClient<Transport, Chain, Account, ComposeRpcSchema>;
+  publicClient: PublicClient<Transport, Chain, SmartAccount, ComposeRpcSchema>;
 }
 
 export const createSmartAccount = async (

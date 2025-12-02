@@ -3,18 +3,12 @@ import type { ComposeConfigReturnType } from '@/config/create';
 import type { ComposedSignedUserOpsTxReturnType } from '@/main';
 import { encodeXtMessage, toRpcUserOpCanonical } from '@/main';
 import type { ComposeRpcSchema } from '@/types/compose';
+import type { SignUserOperationsRequest } from '@zerodev/multi-chain-ecdsa-validator';
 import { prepareAndSignUserOperations, signUserOperations } from '@zerodev/multi-chain-ecdsa-validator';
 import type { CreateKernelAccountReturnType } from '@zerodev/sdk';
-import type { Account, Chain, Client, PublicClient, Transport } from 'viem';
+import type { Chain, Client, PublicClient, Transport } from 'viem';
 import { type Address, type Hex } from 'viem';
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import type {
-  GetPaymasterDataParameters,
-  PaymasterActions,
-  PrepareUserOperationReturnType,
-  SmartAccount
-} from 'viem/account-abstraction';
+import type { GetPaymasterDataParameters, PaymasterActions, SmartAccount } from 'viem/account-abstraction';
 
 const FALLBACK_CALL_GAS_LIMIT = 900_000n;
 const MIN_VERIFICATION_GAS_LIMIT = 1_200_000n;
@@ -109,8 +103,8 @@ export const createUserOps = async (
 export type CreateUserOPReturnType = Awaited<ReturnType<typeof createUserOps>>;
 
 type ComposeUnpreparedUserOpsParams = {
-  account: CreateKernelAccountReturnType<'0.7'>;
-  publicClient: PublicClient<Transport, Chain, Account, ComposeRpcSchema>;
+  account: CreateKernelAccountReturnType;
+  publicClient: PublicClient<Transport, Chain, SmartAccount, ComposeRpcSchema>;
   userOp: CreateUserOPReturnType;
 }[];
 
@@ -140,9 +134,9 @@ export const composeUnpreparedUserOps = async (
 };
 
 type ComposePreparedUserOpsParams = {
-  account: CreateKernelAccountReturnType<'0.7'>;
-  publicClient: PublicClient<Transport, Chain, Account, ComposeRpcSchema>;
-  userOp: PrepareUserOperationReturnType;
+  account: CreateKernelAccountReturnType;
+  publicClient: PublicClient<Transport, Chain, SmartAccount, ComposeRpcSchema>;
+  userOp: SignUserOperationsRequest;
 }[];
 
 export const composePreparedUserOps = async (
@@ -154,7 +148,7 @@ export const composePreparedUserOps = async (
   const sourceKernelAccount = operations[0].account;
 
   const signedCanonicalOps = (
-    await signUserOperations(sourcePublicClient as any, {
+    await signUserOperations(sourcePublicClient, {
       userOperations: unsignedUserOps,
       account: sourceKernelAccount // it uses it to get the Entrypoint address and version
     })
@@ -170,7 +164,7 @@ export const composePreparedUserOps = async (
 
 export type composeSignedUserOpsParams = {
   signedCanonicalOps: ReturnType<typeof toRpcUserOpCanonical>;
-  publicClient: PublicClient<Transport, Chain, Account, ComposeRpcSchema>;
+  publicClient: PublicClient<Transport, Chain, SmartAccount, ComposeRpcSchema>;
 }[];
 
 export const composeSignedUserOps = async (
