@@ -6,7 +6,6 @@ import { createConfig, http } from '@wagmi/core';
 import { createPublicClient, rpcSchema } from 'viem';
 import { describe, expect, it } from 'vitest';
 
-
 describe('createComposeConfig initialization', () => {
   it('should initialize compose config with rollup chains', () => {
     const wagmiConfig = createConfig({
