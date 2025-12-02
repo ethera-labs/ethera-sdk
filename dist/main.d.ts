@@ -463,7 +463,7 @@ export declare const composeRollupsContracts: {
     readonly bridge: "0x1388C9619aCCcd1dfff0234626EDDA61413Be74e";
 };
 
-declare type ComposeRpcSchema = [
+export declare type ComposeRpcSchema = [
     {
     Method: 'eth_sendXTransaction';
     Parameters: [string];
@@ -1033,6 +1033,10 @@ export declare const polygon: {
     formatters?: undefined;
     serializers?: ChainSerializers<undefined, TransactionSerializable> | undefined;
 };
+
+export declare type Prettify<T> = {
+    [K in keyof T]: T[K];
+} & {};
 
 declare type Props = {
     chainId: number;
