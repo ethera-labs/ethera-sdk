@@ -1,15 +1,15 @@
 {
-  "name": "@compose-network/sdk",
-  "version": "0.1.2",
+  "name": "@ssv-labs/compose-sdk",
+  "version": "0.0.1",
   "author": "SSV.Labs",
-  "description": "ssv labs sdk",
+  "description": "ssv labs compose sdk",
   "keywords": [
     "ssv",
     "sdk",
     "ssv-keys",
     "keyshares"
   ],
-  "repository": "https://github.com/ssvlabs/ssv-sdk",
+  "repository": "https://github.com/compose-network/compose-sdk",
   "files": [
     "dist"
   ],
