@@ -1,0 +1,37 @@
+{
+  // Force TS server reload after pnpm override
+  "compilerOptions": {
+    "plugins": [
+      {
+        "name": "@0no-co/graphqlsp",
+        "schema": "./schema.graphql"
+      }
+    ],
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "module": "ESNext",
+    "lib": ["ES2020", "DOM"],
+    "skipLibCheck": true,
+    "jsx": "react-jsx",
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    /* Linting */
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "declaration": true,
+    "declarationDir": "./dist/types",
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist", "src/graphql/**/*", "demo"]
+}
