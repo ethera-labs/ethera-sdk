@@ -3,12 +3,11 @@ import type { ComposeConfigReturnType } from '@/config/create';
 import type { ComposedSignedUserOpsTxReturnType } from '@/main';
 import { encodeXtMessage, toRpcUserOpCanonical } from '@/main';
 import type { ComposeRpcSchema } from '@/types/compose';
-import { prepareAndSignUserOperations } from '@zerodev/multi-chain-ecdsa-validator';
+import type { SignUserOperationsRequest } from '@zerodev/multi-chain-ecdsa-validator';
+import { prepareAndSignUserOperations, signUserOperations } from '@zerodev/multi-chain-ecdsa-validator';
 import type { CreateKernelAccountReturnType } from '@zerodev/sdk';
-import type { Account, Chain, Client, PublicClient, Transport } from 'viem';
+import type { Chain, Client, PublicClient, Transport } from 'viem';
 import { type Address, type Hex } from 'viem';
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { GetPaymasterDataParameters, PaymasterActions, SmartAccount } from 'viem/account-abstraction';
 
 const FALLBACK_CALL_GAS_LIMIT = 900_000n;
@@ -103,31 +102,80 @@ export const createUserOps = async (
 
 export type CreateUserOPReturnType = Awaited<ReturnType<typeof createUserOps>>;
 
-type ComposeUserOpsParams = {
-  account: CreateKernelAccountReturnType<'0.7'>;
-  publicClient: PublicClient<Transport, Chain, Account, ComposeRpcSchema>;
+type ComposeUnpreparedUserOpsParams = {
+  account: CreateKernelAccountReturnType;
+  publicClient: PublicClient<Transport, Chain, SmartAccount, ComposeRpcSchema>;
   userOp: CreateUserOPReturnType;
 }[];
-type ComposeUserOpsOptions = {
+
+export type ComposeUserOpsOptions = {
   onSigned?: (signedOps: ReturnType<typeof toRpcUserOpCanonical>[]) => void;
   onComposed?: (builds: ComposedSignedUserOpsTxReturnType[], explorerUrls: string[]) => void;
   onPayloadEncoded?: (payload: Hex) => void;
 };
-export const composeUserOps = async (operations: ComposeUserOpsParams, options: ComposeUserOpsOptions = {}) => {
-  const signedOps = (
+
+export const composeUnpreparedUserOps = async (
+  operations: ComposeUnpreparedUserOpsParams,
+  options: ComposeUserOpsOptions = {}
+) => {
+  const signedCanonicalOps = (
     await prepareAndSignUserOperations(
       operations.map((operation) => operation.publicClient as Client<Transport, Chain, SmartAccount>),
       operations.map((operation) => operation.userOp)
     )
   ).map(toRpcUserOpCanonical);
 
-  options.onSigned?.(signedOps);
+  options.onSigned?.(signedCanonicalOps);
 
+  return composeSignedUserOps(
+    operations.map((op, i) => ({ ...op, signedCanonicalOps: signedCanonicalOps[i] })),
+    options
+  );
+};
+
+type ComposePreparedUserOpsParams = {
+  account: CreateKernelAccountReturnType;
+  publicClient: PublicClient<Transport, Chain, SmartAccount, ComposeRpcSchema>;
+  userOp: SignUserOperationsRequest;
+}[];
+
+export const composePreparedUserOps = async (
+  operations: ComposePreparedUserOpsParams,
+  options: ComposeUserOpsOptions = {}
+) => {
+  const unsignedUserOps = operations.map((op) => op.userOp);
+  const sourcePublicClient = operations[0].publicClient;
+  const sourceKernelAccount = operations[0].account;
+
+  const signedCanonicalOps = (
+    await signUserOperations(sourcePublicClient, {
+      userOperations: unsignedUserOps,
+      account: sourceKernelAccount // it uses it to get the Entrypoint address and version
+    })
+  ).map(toRpcUserOpCanonical);
+
+  options.onSigned?.(signedCanonicalOps);
+
+  return composeSignedUserOps(
+    operations.map((op, i) => ({ ...op, signedCanonicalOps: signedCanonicalOps[i] })),
+    options
+  );
+};
+
+export type composeSignedUserOpsParams = {
+  signedCanonicalOps: ReturnType<typeof toRpcUserOpCanonical>;
+  publicClient: PublicClient<Transport, Chain, SmartAccount, ComposeRpcSchema>;
+}[];
+
+export const composeSignedUserOps = async (
+  operations: composeSignedUserOpsParams,
+  options: ComposeUserOpsOptions = {}
+) => {
   const builds = await Promise.all(
-    operations.map((operation, i) =>
+    operations.map((operation) =>
       operation.publicClient.request({
         method: 'compose_buildSignedUserOpsTx',
-        params: [[signedOps[i]], { chainId: operation.publicClient.chain!.id }]
+        params: [[operation.signedCanonicalOps], { chainId: operation.publicClient.chain!.id }]
       })
     )
   );

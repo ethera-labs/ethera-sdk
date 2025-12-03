@@ -7,17 +7,20 @@ import { AbiType } from 'abitype';
 import { AbiTypeToPrimitiveType } from 'abitype';
 import { AccessList } from 'viem';
 import { Address } from 'viem';
+import { Chain } from 'viem';
 import { ChainContract } from 'viem';
 import { ChainFees } from 'viem';
 import { ChainSerializers } from 'viem';
 import { Config } from '@wagmi/core';
 import { CreateKernelAccountReturnType } from '@zerodev/sdk';
 import { EntryPointType } from '@zerodev/sdk/types';
+import { EntryPointVersion } from 'viem/account-abstraction';
 import { ExtractAbiFunction } from 'abitype';
 import { ExtractAbiFunctionNames } from 'abitype';
 import { ExtractAbiFunctions } from 'abitype';
 import { Hash } from 'viem';
 import { Hex } from 'viem';
+import { KernelValidator } from '@zerodev/sdk/types';
 import { Log } from 'viem';
 import { OpStackRpcBlock } from 'viem/chains';
 import { OpStackRpcTransaction } from 'viem/chains';
@@ -28,8 +31,13 @@ import { PrepareUserOperationReturnType } from 'viem/account-abstraction';
 import { PublicClient } from 'viem';
 import { serializeTransactionOpStack } from 'viem/chains';
 import { SignedAuthorizationList } from 'viem';
+import { Signer } from '@zerodev/sdk/types';
+import { SignUserOperationsRequest } from '@zerodev/multi-chain-ecdsa-validator';
+import { SmartAccount } from 'viem/account-abstraction';
+import { TransactionReceipt } from 'viem';
 import { TransactionSerializable } from 'viem';
 import { TransactionType } from 'viem';
+import { Transport } from 'viem';
 import { Withdrawal } from 'viem';
 
 export declare type AbiEncoder<T extends AbiFunction[]> = {
@@ -407,21 +415,16 @@ export declare const bigintMin: (...args: bigint[]) => bigint;
 
 export declare const bigintRound: (value: bigint, precision: bigint) => bigint;
 
-declare type Call = {
-    to: Address;
-    value: bigint;
-    data: Hex;
-};
-
 declare type ComposeConfigArgs<TConfig extends Config> = {
     wagmi: TConfig;
     getPaymasterEndpoint?: (args: PaymasterEndpointArgs<TConfig>) => string;
-    accountAbstractionContracts?: Record<TConfig['chains'][number]['id'], AccountAbstractionContracts>;
+    accountAbstractionContracts: Partial<Record<TConfig['chains'][number]['id'], AccountAbstractionContracts>>;
 };
 
 export declare type ComposeConfigReturnType<TConfig extends Config = Config> = {
-    getPublicClient: (chainId: TConfig['chains'][number]['id']) => PublicClient;
+    getPublicClient: (chainId: TConfig['chains'][number]['id']) => PublicClient<Transport, Chain, SmartAccount, ComposeRpcSchema>;
     hasPaymaster: boolean;
+    entryPoint: EntryPointType<EntryPointVersion>;
 } & Pick<ComposeConfigArgs<TConfig>, 'getPaymasterEndpoint' | 'accountAbstractionContracts'>;
 
 export declare interface ComposedSignedUserOpsTxReturnType {
@@ -435,6 +438,22 @@ export declare interface ComposedSignedUserOpsTxReturnType {
     userOpHashes: Hex[];
 }
 
+export declare const composePreparedUserOps: (operations: ComposePreparedUserOpsParams, options?: ComposeUserOpsOptions) => Promise<{
+    payload: `0x${string}`;
+    builds: ComposedSignedUserOpsTxReturnType[];
+    explorerUrls: string[];
+    send: () => Promise<{
+        hashes: `0x${string}`[];
+        wait: () => Promise<TransactionReceipt[]>;
+    }>;
+}>;
+
+declare type ComposePreparedUserOpsParams = {
+    account: CreateKernelAccountReturnType;
+    publicClient: PublicClient<Transport, Chain, SmartAccount, ComposeRpcSchema>;
+    userOp: SignUserOperationsRequest;
+}[];
+
 export declare const composeRollupsContracts: {
     readonly tokens: {
         readonly WETH: "0x29dDf1a92069c4c170A63032C93c2aE66C359Bf9";
@@ -444,11 +463,85 @@ export declare const composeRollupsContracts: {
     readonly bridge: "0x1388C9619aCCcd1dfff0234626EDDA61413Be74e";
 };
 
+export declare type ComposeRpcSchema = [
+    {
+    Method: 'eth_sendXTransaction';
+    Parameters: [string];
+    ReturnType: null;
+},
+    {
+    Method: 'compose_buildSignedUserOpsTx';
+    Parameters: [ReturnType<typeof toRpcUserOpCanonical>[], {
+        chainId: number;
+    }];
+    ReturnType: ComposedSignedUserOpsTxReturnType;
+}
+];
+
+export declare const composeSignedUserOps: (operations: composeSignedUserOpsParams, options?: ComposeUserOpsOptions) => Promise<{
+    payload: `0x${string}`;
+    builds: ComposedSignedUserOpsTxReturnType[];
+    explorerUrls: string[];
+    send: () => Promise<{
+        hashes: `0x${string}`[];
+        wait: () => Promise<TransactionReceipt[]>;
+    }>;
+}>;
+
+export declare type composeSignedUserOpsParams = {
+    signedCanonicalOps: ReturnType<typeof toRpcUserOpCanonical>;
+    publicClient: PublicClient<Transport, Chain, SmartAccount, ComposeRpcSchema>;
+}[];
+
+export declare type ComposeSmartAccount = CreateKernelAccountReturnType & {
+    createUserOp: (calls: UserOPCall[]) => Promise<{
+        account: CreateKernelAccountReturnType;
+        signer: Signer;
+        chainId: number;
+        publicClient: PublicClient<Transport, Chain, SmartAccount, ComposeRpcSchema>;
+        userOp: Awaited<ReturnType<typeof createUserOps>>;
+    }>;
+};
+
+export declare const composeUnpreparedUserOps: (operations: ComposeUnpreparedUserOpsParams, options?: ComposeUserOpsOptions) => Promise<{
+    payload: `0x${string}`;
+    builds: ComposedSignedUserOpsTxReturnType[];
+    explorerUrls: string[];
+    send: () => Promise<{
+        hashes: `0x${string}`[];
+        wait: () => Promise<TransactionReceipt[]>;
+    }>;
+}>;
+
+declare type ComposeUnpreparedUserOpsParams = {
+    account: CreateKernelAccountReturnType;
+    publicClient: PublicClient<Transport, Chain, SmartAccount, ComposeRpcSchema>;
+    userOp: CreateUserOPReturnType;
+}[];
+
+export declare type ComposeUserOpsOptions = {
+    onSigned?: (signedOps: ReturnType<typeof toRpcUserOpCanonical>[]) => void;
+    onComposed?: (builds: ComposedSignedUserOpsTxReturnType[], explorerUrls: string[]) => void;
+    onPayloadEncoded?: (payload: Hex) => void;
+};
+
 export declare const createAbiEncoder: <T extends Abi = Abi>(abi: T) => AbiEncoder<ExtractAbiFunctions<T, "nonpayable" | "payable">[]>;
 
 export declare function createComposeConfig<TConfig extends Config>(props: ComposeConfigArgs<TConfig>): ComposeConfigReturnType<TConfig>;
 
-export declare const createUserOp: (config: ComposeConfigReturnType, account: CreateKernelAccountReturnType<"0.7">, calls: Call[]) => Promise<{
+export declare const createSmartAccount: ({ signer, chainId, multiChainIds }: Props, config: ComposeConfigReturnType) => Promise<CreateSmartAccountReturnType>;
+
+export declare interface CreateSmartAccountReturnType {
+    validator: KernelValidator<'MultiChainECDSAValidator'>;
+    account: ComposeSmartAccount;
+    signer: Signer;
+    publicClient: PublicClient<Transport, Chain, SmartAccount, ComposeRpcSchema>;
+}
+
+export declare type CreateUserOPReturnType = Awaited<ReturnType<typeof createUserOps>>;
+
+export declare const createUserOps: (config: ComposeConfigReturnType, account: CreateKernelAccountReturnType<"0.7">, calls: UserOPCall[]) => Promise<{
+    paymaster?: PaymasterActions | undefined;
     account: CreateKernelAccountReturnType<"0.7">;
     chainId: number;
     callData: `0x${string}`;
@@ -457,7 +550,6 @@ export declare const createUserOp: (config: ComposeConfigReturnType, account: Cr
     preVerificationGas: bigint;
     maxFeePerGas: bigint;
     maxPriorityFeePerGas: bigint;
-    paymaster: PaymasterActions | undefined;
 }>;
 
 export declare function encodeXtMessage(params: {
@@ -942,6 +1034,16 @@ export declare const polygon: {
     serializers?: ChainSerializers<undefined, TransactionSerializable> | undefined;
 };
 
+export declare type Prettify<T> = {
+    [K in keyof T]: T[K];
+} & {};
+
+declare type Props = {
+    chainId: number;
+    multiChainIds?: number[];
+    signer: Signer;
+};
+
 export declare const rollupA: {
     blockExplorers: {
         readonly default: {
@@ -1081,6 +1183,12 @@ declare const units: {
     readonly weeks: 604800000;
     readonly months: 2629746000;
     readonly years: 31556952000;
+};
+
+export declare type UserOPCall = {
+    to: Address;
+    value: bigint;
+    data: Hex;
 };
 
 export { }

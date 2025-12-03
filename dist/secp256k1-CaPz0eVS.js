@@ -1,7 +1,6 @@
 "use strict";
 Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
-const sha2 = require("./sha2-DFJnH_NE.js");
-const index = require("./index-B1vmfg89.js");
+const xt = require("./xt-CEqcfc_O.js");
 /*! noble-curves - MIT License (c) 2022 Paul Miller (paulmillr.com) */
 const _0n$4 = /* @__PURE__ */ BigInt(0);
 const _1n$4 = /* @__PURE__ */ BigInt(1);
@@ -408,7 +407,7 @@ function FpLegendre(Fp, n) {
 }
 function nLength(n, nBitLength) {
   if (nBitLength !== void 0)
-    index.anumber(nBitLength);
+    xt.anumber(nBitLength);
   const _nBitLength = nBitLength !== void 0 ? nBitLength : n.toString(2).length;
   const nByteLength = Math.ceil(_nBitLength / 8);
   return { nBitLength: _nBitLength, nByteLength };
@@ -489,13 +488,13 @@ function mapHashToField(key, fieldOrder, isLE = false) {
   const reduced = mod(num, fieldOrder - _1n$3) + _1n$3;
   return isLE ? numberToBytesLE(reduced, fieldLen) : numberToBytesBE(reduced, fieldLen);
 }
-class HMAC extends index.Hash {
+class HMAC extends xt.Hash {
   constructor(hash, _key) {
     super();
     this.finished = false;
     this.destroyed = false;
-    index.ahash(hash);
-    const key = index.toBytes$1(_key);
+    xt.ahash(hash);
+    const key = xt.toBytes(_key);
     this.iHash = hash.create();
     if (typeof this.iHash.update !== "function")
       throw new Error("Expected instance of class which extends utils.Hash");
@@ -511,16 +510,16 @@ class HMAC extends index.Hash {
     for (let i = 0; i < pad.length; i++)
       pad[i] ^= 54 ^ 92;
     this.oHash.update(pad);
-    index.clean(pad);
+    xt.clean(pad);
   }
   update(buf) {
-    index.aexists(this);
+    xt.aexists(this);
     this.iHash.update(buf);
     return this;
   }
   digestInto(out) {
-    index.aexists(this);
-    index.abytes(out, this.outputLen);
+    xt.aexists(this);
+    xt.abytes(out, this.outputLen);
     this.finished = true;
     this.iHash.digestInto(out);
     this.oHash.update(out);
@@ -1675,8 +1674,8 @@ function weierstrass(curveDef) {
 function getHash(hash) {
   return {
     hash,
-    hmac: (key, ...msgs) => hmac(hash, key, index.concatBytes(...msgs)),
-    randomBytes: index.randomBytes
+    hmac: (key, ...msgs) => hmac(hash, key, xt.concatBytes(...msgs)),
+    randomBytes: xt.randomBytes
   };
 }
 function createCurve(curveDef, defHash) {
@@ -1749,5 +1748,5 @@ const secp256k1 = createCurve({
       return { k1neg, k1, k2neg, k2 };
     }
   }
-}, sha2.sha256);
+}, xt.sha256);
 exports.secp256k1 = secp256k1;

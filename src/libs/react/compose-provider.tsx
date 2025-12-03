@@ -1,7 +1,7 @@
 import type { ComposeConfigReturnType } from '@/config/create';
 import type { Config } from '@wagmi/core';
-import type { ReactElement } from 'react';
-import { createContext, ReactNode, useContext } from 'react';
+import type { ReactElement, ReactNode } from 'react';
+import { createContext, useContext } from 'react';
 
 type ComposeContextValue<TConfig extends Config> = ComposeConfigReturnType<TConfig>;
 

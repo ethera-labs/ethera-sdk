@@ -3,6 +3,7 @@ import { useAccount, useWalletClient } from 'wagmi';
 import { useComposeConfig } from '@/libs/react/compose-provider';
 import { createSmartAccount } from '@/utils/smart-account/create';
 import { useQuery } from '@tanstack/react-query';
+
 type Props = {
   chainId: number;
   multiChainIds?: number[];
@@ -14,7 +15,7 @@ export const useSmartAccount = ({ chainId, multiChainIds = [] }: Props) => {
   const walletClient = useWalletClient();
 
   if (!composeConfig.accountAbstractionContracts?.[chainId]) {
-    console.error(`Account abstraction contracts not fou  nd for chain ${chainId}`);
+    console.error(`Account abstraction contracts not found for chain ${chainId}`);
   }
 
   return useQuery({
