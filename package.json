@@ -101,7 +101,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "release-it": "17.11.0",
-    "rollup": "4.45.0",
+    "rollup": "4.59.0",
     "rollup-plugin-delete": "2.2.0",
     "rollup-plugin-dts": "6.2.1",
     "rollup-plugin-tsconfig-paths": "1.5.2",
