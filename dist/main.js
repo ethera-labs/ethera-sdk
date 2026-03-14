@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
-const xt = require("./xt-CEqcfc_O.js");
+const xt = require("./xt-BVW_TnLK.js");
 const core = require("@wagmi/core");
 const viem = require("viem");
 function createComposeConfig(props) {
