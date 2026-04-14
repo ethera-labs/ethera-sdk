@@ -20,7 +20,6 @@ declare type AccountAbstractionContracts = {
     kernelImpl: `0x${string}`;
     kernelFactory: `0x${string}`;
     multichainValidator: `0x${string}`;
-    metaFactory: `0x${string}`;
 };
 
 declare type ComposeConfigArgs<TConfig extends Config> = {
