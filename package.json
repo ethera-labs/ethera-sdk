@@ -1,15 +1,14 @@
 {
-  "name": "@ssv-labs/compose-sdk",
+  "name": "@ssv-labs/ethera-sdk",
   "version": "0.0.1",
   "author": "SSV.Labs",
-  "description": "ssv labs compose sdk",
+  "description": "Ethera SDK",
   "keywords": [
     "ssv",
-    "sdk",
-    "ssv-keys",
-    "keyshares"
+    "ethera",
+    "sdk"
   ],
-  "repository": "https://github.com/compose-network/compose-sdk",
+  "repository": "https://github.com/ethera-labs/compose-sdk/",
   "files": [
     "dist"
   ],
