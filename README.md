@@ -86,7 +86,6 @@ export const composeConfig = createComposeConfig({
     //   kernelImpl: '0x...',
     //   kernelFactory: '0x...',
     //   multichainValidator: '0x...',
-    //   metaFactory: '0x...'
     // },
   }
 });
@@ -623,7 +622,6 @@ type AccountAbstractionContracts = {
   kernelImpl: `0x${string}`; // Kernel implementation address
   kernelFactory: `0x${string}`; // Kernel factory address
   multichainValidator: `0x${string}`; // Multi-chain validator address
-  metaFactory: `0x${string}`; // Meta factory address
 };
 ```
 
@@ -653,10 +651,8 @@ The paymaster endpoint should support the following methods:
 
 The SDK includes predefined chain configurations:
 
-- `rollupA` (Chain ID: 11113)
-- `rollupB` (Chain ID: 22224)
-- `hoodi` (Chain ID: 560048)
-- `mainnet`, `polygon`, `base`, `arbitrum`, `optimism`
+- `rollupA` (Chain ID: 555555)
+- `rollupB` (Chain ID: 666666)
 
 You can also use custom chains by defining them with viem's `defineChain`.
 
