@@ -1,7 +1,7 @@
 import { jsx } from "react/jsx-runtime";
 import { createContext, useContext } from "react";
 import { useAccount, useWalletClient } from "wagmi";
-import { u as createSmartAccount } from "./xt-BIgtj6Se.mjs";
+import { l as createSmartAccount } from "./xt-7DrzMAD9.mjs";
 import { useQuery } from "@tanstack/react-query";
 const ComposeContext = createContext(null);
 function ComposeProvider({

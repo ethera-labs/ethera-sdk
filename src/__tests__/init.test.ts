@@ -22,10 +22,10 @@ describe('createComposeConfig initialization', () => {
     const config = createComposeConfig({
       wagmi: wagmiConfig,
       getPaymasterEndpoint({ chainId }) {
-        if (chainId === 11113) {
-          return 'https://paymaster.com/rpc/v1/11113';
-        } else if (chainId === 22224) {
-          return 'https://paymaster.com/rpc/v1/22224';
+        if (chainId === 555555) {
+          return 'https://paymaster.com/rpc/v1/555555';
+        } else if (chainId === 666666) {
+          return 'https://paymaster.com/rpc/v1/666666';
         }
         return '';
       },
@@ -38,10 +38,10 @@ describe('createComposeConfig initialization', () => {
     expect(config).toBeDefined();
     expect(config.getPaymasterEndpoint).toBeDefined();
     expect(config.getPaymasterEndpoint?.({ method: 'pm_getPaymasterStubData', chainId: rollupA.id })).toBe(
-      'https://paymaster.com/rpc/v1/11113'
+      'https://paymaster.com/rpc/v1/555555'
     );
     expect(config.getPaymasterEndpoint?.({ method: 'pm_getPaymasterStubData', chainId: rollupB.id })).toBe(
-      'https://paymaster.com/rpc/v1/22224'
+      'https://paymaster.com/rpc/v1/666666'
     );
     expect(config.getPublicClient(rollupA.id)).toBeDefined();
     expect(config.getPublicClient(rollupB.id)).toBeDefined();
