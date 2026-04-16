@@ -206,7 +206,7 @@ function SmartAccountDisplay() {
 
 ```typescript
 import { useSmartAccount, useComposeConfig } from '@ssv-labs/ethera-sdk/react';
-import { createAbiEncoder, composeUserOps } from '@ssv-labs/ethera-sdk';
+import { createAbiEncoder, composeUnpreparedUserOps } from '@ssv-labs/ethera-sdk';
 import { erc20Abi } from 'viem';
 import { rollupA, rollupB } from '@ssv-labs/ethera-sdk';
 import { useMutation } from '@tanstack/react-query';
@@ -254,7 +254,7 @@ function TokenApproval() {
       ]);
 
       // Compose user operations
-      const composed = await composeUserOps([userOpA, userOpB]);
+      const composed = await composeUnpreparedUserOps([userOpA, userOpB]);
 
       // Send the composed transactions
       const result = await composed.send();
@@ -370,7 +370,7 @@ function ConfigInfo() {
 
 ```typescript
 import { useSmartAccount } from '@ssv-labs/ethera-sdk/react';
-import { createAbiEncoder, composeUserOps } from '@ssv-labs/ethera-sdk';
+import { createAbiEncoder, composeUnpreparedUserOps } from '@ssv-labs/ethera-sdk';
 import { erc20Abi } from 'viem';
 import { rollupA } from '@ssv-labs/ethera-sdk';
 import { useMutation } from '@tanstack/react-query';
@@ -402,7 +402,7 @@ function CompleteExample() {
       ]);
 
       // Compose and send the user operation
-      const composed = await composeUserOps([userOp]);
+      const composed = await composeUnpreparedUserOps([userOp]);
 
       // Send the transaction
       const result = await composed.send();
@@ -565,19 +565,19 @@ const approveData = erc20.approve({
 
 **Returns:** Encoder object with methods for each function in the ABI
 
-#### `composeUserOps`
+#### `composeUnpreparedUserOps`
 
 Composes multiple user operations for atomic cross-chain execution.
 
 ```typescript
-import { composeUserOps } from '@ssv-labs/ethera-sdk';
+import { composeUnpreparedUserOps } from '@ssv-labs/ethera-sdk';
 
 // Create user operations first
 const userOp1 = await smartAccountA.account.createUserOp([/* calls */]);
 const userOp2 = await smartAccountB.account.createUserOp([/* calls */]);
 
 // Then compose them - createUserOp returns everything needed (account, publicClient, userOp, etc.)
-const composed = await composeUserOps([userOp1, userOp2]);
+const composed = await composeUnpreparedUserOps([userOp1, userOp2]);
 
 // Send the composed transactions
 const result = await composed.send();
