@@ -10,8 +10,8 @@
     "multichain",
     "web3"
   ],
-  "repository": "https://github.com/ethera-labs/compose-sdk",
-  "homepage": "https://github.com/ethera-labs/compose-sdk#readme",
+  "repository": "https://github.com/ethera-labs/ethera-sdk",
+  "homepage": "https://github.com/ethera-labs/ethera-sdk#readme",
   "files": [
     "dist"
   ],
