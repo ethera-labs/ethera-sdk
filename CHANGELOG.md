@@ -1,3 +1,12 @@
+# 0.0.2 (2026-04-16)
+
+### Changes
+
+- package naming and metadata alignment
+- update README install/import examples to current package name
+- align npm metadata (name, description, repository, homepage, keywords)
+- clean published tarball contents (keep markdown README only)
+
 # 0.2.0 (2024-04-17)
 
 ### Features
