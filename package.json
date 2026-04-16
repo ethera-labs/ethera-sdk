@@ -1,15 +1,17 @@
 {
-  "name": "@ssv-labs/compose-sdk",
-  "version": "0.0.1",
+  "name": "@ssv-labs/ethera-sdk",
+  "version": "0.0.2",
   "author": "SSV.Labs",
-  "description": "ssv labs compose sdk",
+  "description": "Ethera SDK for multi-chain account abstraction",
   "keywords": [
-    "ssv",
+    "ethera",
     "sdk",
-    "ssv-keys",
-    "keyshares"
+    "account-abstraction",
+    "multichain",
+    "web3"
   ],
-  "repository": "https://github.com/compose-network/compose-sdk",
+  "repository": "https://github.com/ethera-labs/ethera-sdk",
+  "homepage": "https://github.com/ethera-labs/ethera-sdk#readme",
   "files": [
     "dist"
   ],
@@ -133,7 +135,7 @@
     "lodash-es": "^4.17.21",
     "protobufjs": "^7.5.4"
   },
-  "license": "SEE LICENSE IN LICENCE FILE",
+  "license": "SEE LICENSE IN LICENSE FILE",
   "peerDependencies": {
     "@tanstack/react-query": "^5.90.5",
     "@wagmi/core": "^2.22.1",
