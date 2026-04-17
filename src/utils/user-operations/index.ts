@@ -1,3 +1,4 @@
+import { ComposeError } from '@/errors';
 import { getPaymasterDataForChain } from '@/api/paymaster';
 import type { ComposeConfigReturnType } from '@/config/create';
 import type { ComposedSignedUserOpsTxReturnType } from '@/main';
@@ -15,6 +16,28 @@ const MIN_VERIFICATION_GAS_LIMIT = 1_200_000n;
 const PRE_VERIFICATION_GAS = 90_000n;
 
 const withMargin = (value: bigint, marginPct = 25n) => value + (value * marginPct) / 100n;
+
+const assertOperationsNotEmpty = (operations: unknown[], method: string) => {
+  if (operations.length === 0) {
+    throw new ComposeError('OPERATIONS_EMPTY', `${method} requires at least one operation.`, {
+      details: { method }
+    });
+  }
+};
+
+const toExplorerUrl = (hash: Hex, publicClient: PublicClient<Transport, Chain, SmartAccount, ComposeRpcSchema>) => {
+  const explorerUrl = publicClient.chain?.blockExplorers?.default?.url;
+
+  if (!explorerUrl) {
+    return hash;
+  }
+
+  try {
+    return new URL(`tx/${hash}`, explorerUrl).toString();
+  } catch {
+    return hash;
+  }
+};
 
 export type UserOPCall = {
   to: Address;
@@ -118,6 +141,8 @@ export const composeUnpreparedUserOps = async (
   operations: ComposeUnpreparedUserOpsParams,
   options: ComposeUserOpsOptions = {}
 ) => {
+  assertOperationsNotEmpty(operations, 'composeUnpreparedUserOps');
+
   const signedCanonicalOps = (
     await prepareAndSignUserOperations(
       operations.map((operation) => operation.publicClient as Client<Transport, Chain, SmartAccount>),
@@ -143,6 +168,8 @@ export const composePreparedUserOps = async (
   operations: ComposePreparedUserOpsParams,
   options: ComposeUserOpsOptions = {}
 ) => {
+  assertOperationsNotEmpty(operations, 'composePreparedUserOps');
+
   const unsignedUserOps = operations.map((op) => op.userOp);
   const sourcePublicClient = operations[0].publicClient;
   const sourceKernelAccount = operations[0].account;
@@ -171,6 +198,8 @@ export const composeSignedUserOps = async (
   operations: composeSignedUserOpsParams,
   options: ComposeUserOpsOptions = {}
 ) => {
+  assertOperationsNotEmpty(operations, 'composeSignedUserOps');
+
   const builds = await Promise.all(
     operations.map((operation) =>
       operation.publicClient.request({
@@ -180,9 +209,7 @@ export const composeSignedUserOps = async (
     )
   );
 
-  const explorerUrls = builds.map((build, i) =>
-    new URL(`tx/${build.hash}`, operations[i].publicClient.chain!.blockExplorers?.default?.url).toString()
-  );
+  const explorerUrls = builds.map((build, i) => toExplorerUrl(build.hash, operations[i].publicClient));
 
   options.onComposed?.(builds, explorerUrls);
 

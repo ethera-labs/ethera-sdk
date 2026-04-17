@@ -1,4 +1,9 @@
+import {
+  type AccountAbstractionContracts,
+  validateAccountAbstractionContracts
+} from '@/config/account-abstraction';
 import { entryPointV07 } from '@/config/defaults';
+import { ComposeError } from '@/errors';
 import type { ComposeRpcSchema } from '@/types/compose';
 import type { Config } from '@wagmi/core';
 import { getPublicClient } from '@wagmi/core';
@@ -9,12 +14,6 @@ import type { EntryPointVersion, SmartAccount } from 'viem/account-abstraction';
 type PaymasterEndpointArgs<TConfig extends Config> = {
   method: 'pm_getPaymasterStubData' | 'pm_getPaymasterData' | 'pm_sponsorUserOperation';
   chainId: TConfig['chains'][number]['id'];
-};
-
-type AccountAbstractionContracts = {
-  kernelImpl: `0x${string}`;
-  kernelFactory: `0x${string}`;
-  multichainValidator: `0x${string}`;
 };
 
 type ComposeConfigArgs<TConfig extends Config> = {
@@ -34,15 +33,26 @@ export type ComposeConfigReturnType<TConfig extends Config = Config> = {
 export function createComposeConfig<TConfig extends Config>(
   props: ComposeConfigArgs<TConfig>
 ): ComposeConfigReturnType<TConfig> {
+  validateAccountAbstractionContracts(
+    props.wagmi.chains.map((chain) => chain.id) as TConfig['chains'][number]['id'][],
+    props.accountAbstractionContracts
+  );
+
   return {
     getPaymasterEndpoint: props.getPaymasterEndpoint,
-    getPublicClient: (chainId) =>
-      getPublicClient(props.wagmi, { chainId }) as unknown as PublicClient<
-        Transport,
-        Chain,
-        SmartAccount,
-        ComposeRpcSchema
-      >,
+    getPublicClient: (chainId) => {
+      const publicClient = getPublicClient(props.wagmi, { chainId }) as
+        | PublicClient<Transport, Chain, SmartAccount, ComposeRpcSchema>
+        | undefined;
+
+      if (!publicClient) {
+        throw new ComposeError('PUBLIC_CLIENT_NOT_FOUND', `Public client not found for chain ${chainId}.`, {
+          details: { chainId }
+        });
+      }
+
+      return publicClient;
+    },
     accountAbstractionContracts: props.accountAbstractionContracts,
     hasPaymaster: Boolean(props.getPaymasterEndpoint),
     entryPoint: entryPointV07

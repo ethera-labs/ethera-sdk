@@ -1,3 +1,4 @@
+import { getAccountAbstractionContractsForChain } from '@/config/account-abstraction';
 import { entryPointV07 } from '@/config';
 import type { ComposeConfigReturnType } from '@/config/create';
 import type { UserOPCall } from '@/utils/user-operations';
@@ -39,19 +40,20 @@ export const createSmartAccount = async (
   config: ComposeConfigReturnType
 ): Promise<CreateSmartAccountReturnType> => {
   const publicClient = config.getPublicClient(chainId);
+  const contracts = getAccountAbstractionContractsForChain(config.accountAbstractionContracts, chainId);
   const validator = await toMultiChainECDSAValidator(publicClient!, {
     entryPoint: config.entryPoint,
     signer,
     kernelVersion: KERNEL_V3_1,
-    validatorAddress: config.accountAbstractionContracts?.[chainId]?.multichainValidator,
+    validatorAddress: contracts.multichainValidator,
     multiChainIds: multiChainIds
   });
   const kernelAccount = await createKernelAccount(publicClient as KernelSmartAccountImplementation['client'], {
     entryPoint: entryPointV07,
     plugins: { sudo: validator },
     kernelVersion: KERNEL_V3_1,
-    accountImplementationAddress: config.accountAbstractionContracts?.[chainId]?.kernelImpl,
-    factoryAddress: config.accountAbstractionContracts?.[chainId]?.kernelFactory,
+    accountImplementationAddress: contracts.kernelImpl,
+    factoryAddress: contracts.kernelFactory,
     useMetaFactory: false
   });
   const boundCreateUserOps = createUserOps.bind(null, config, kernelAccount);

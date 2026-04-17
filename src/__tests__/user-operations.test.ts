@@ -1,5 +1,6 @@
 import { getPaymasterDataForChain } from '@/api/paymaster';
 import type { ComposeConfigReturnType } from '@/config/create';
+import { ComposeError } from '@/errors';
 import type { ComposeRpcSchema } from '@/types/compose';
 import {
   composePreparedUserOps,
@@ -342,6 +343,33 @@ describe('compose user operations', () => {
     });
   });
 
+  it('rejects empty unprepared operations arrays', async () => {
+    await expect(composeUnpreparedUserOps([])).rejects.toThrowError(
+      expect.objectContaining<Partial<ComposeError>>({
+        code: 'OPERATIONS_EMPTY',
+        details: { method: 'composeUnpreparedUserOps' }
+      })
+    );
+  });
+
+  it('rejects empty prepared operations arrays', async () => {
+    await expect(composePreparedUserOps([])).rejects.toThrowError(
+      expect.objectContaining<Partial<ComposeError>>({
+        code: 'OPERATIONS_EMPTY',
+        details: { method: 'composePreparedUserOps' }
+      })
+    );
+  });
+
+  it('rejects empty signed operations arrays', async () => {
+    await expect(composeSignedUserOps([])).rejects.toThrowError(
+      expect.objectContaining<Partial<ComposeError>>({
+        code: 'OPERATIONS_EMPTY',
+        details: { method: 'composeSignedUserOps' }
+      })
+    );
+  });
+
   it('builds payloads and provides send helpers for signed user operations', async () => {
     const publicClientA = createMockPublicClient(3, 'https://explorer.a/');
     const publicClientB = createMockPublicClient(4, 'https://explorer.b/');
@@ -390,5 +418,19 @@ describe('compose user operations', () => {
     await sendResult.wait();
     expect(publicClientA.waitForTransactionReceipt).toHaveBeenCalledWith({ hash: '0xhash1' });
     expect(publicClientB.waitForTransactionReceipt).toHaveBeenCalledWith({ hash: '0xhash2' });
+  });
+
+  it('falls back to transaction hashes when explorer metadata is missing', async () => {
+    const publicClient = createMockPublicClient(7);
+    publicClient.chain = { id: 7 } as Chain;
+    (publicClient.request as unknown as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({ hash: '0xhash1', raw: '0xraw1' })
+      .mockResolvedValueOnce(undefined);
+
+    const result = await composeSignedUserOps([
+      { publicClient, signedCanonicalOps: createCanonical('a') }
+    ] as composeSignedUserOpsParams);
+
+    expect(result.explorerUrls).toEqual(['0xhash1']);
   });
 });
