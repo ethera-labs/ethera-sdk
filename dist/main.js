@@ -1,12 +1,24 @@
 "use strict";
 Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
-const xt = require("./xt-CJ_buhDd.js");
+const xt = require("./xt-DZWvNwP8.js");
 const core = require("@wagmi/core");
 const viem = require("viem");
 function createComposeConfig(props) {
+  xt.validateAccountAbstractionContracts(
+    props.wagmi.chains.map((chain) => chain.id),
+    props.accountAbstractionContracts
+  );
   return {
     getPaymasterEndpoint: props.getPaymasterEndpoint,
-    getPublicClient: (chainId) => core.getPublicClient(props.wagmi, { chainId }),
+    getPublicClient: (chainId) => {
+      const publicClient = core.getPublicClient(props.wagmi, { chainId });
+      if (!publicClient) {
+        throw new xt.ComposeError("PUBLIC_CLIENT_NOT_FOUND", `Public client not found for chain ${chainId}.`, {
+          details: { chainId }
+        });
+      }
+      return publicClient;
+    },
     accountAbstractionContracts: props.accountAbstractionContracts,
     hasPaymaster: Boolean(props.getPaymasterEndpoint),
     entryPoint: xt.entryPointV07
@@ -105,6 +117,8 @@ const tryCatch = (fn) => {
     return [null, e];
   }
 };
+exports.ACCOUNT_ABSTRACTION_CONTRACT_FIELDS = xt.ACCOUNT_ABSTRACTION_CONTRACT_FIELDS;
+exports.ComposeError = xt.ComposeError;
 exports.bigintAbs = xt.bigintAbs;
 exports.bigintFloor = xt.bigintFloor;
 exports.bigintMax = xt.bigintMax;
@@ -118,13 +132,16 @@ exports.createSmartAccount = xt.createSmartAccount;
 exports.createUserOps = xt.createUserOps;
 exports.encodeXtMessage = xt.encodeXtMessage;
 exports.entryPointV07 = xt.entryPointV07;
+exports.getAccountAbstractionContractsForChain = xt.getAccountAbstractionContractsForChain;
 exports.isBigIntChanged = xt.isBigIntChanged;
+exports.isComposeError = xt.isComposeError;
 exports.rollupA = xt.rollupA;
 exports.rollupB = xt.rollupB;
 exports.rollupsAccountAbstractionContracts = xt.rollupsAccountAbstractionContracts;
 exports.roundOperatorFee = xt.roundOperatorFee;
 exports.stringifyBigints = xt.stringifyBigints;
 exports.toRpcUserOpCanonical = xt.toRpcUserOpCanonical;
+exports.validateAccountAbstractionContracts = xt.validateAccountAbstractionContracts;
 exports._percentageFormatter = _percentageFormatter;
 exports.bigintFormatter = bigintFormatter;
 exports.createAbiEncoder = createAbiEncoder;

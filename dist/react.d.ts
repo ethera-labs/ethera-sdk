@@ -16,11 +16,11 @@ import { SmartAccount } from 'viem/account-abstraction';
 import { Transport } from 'viem';
 import { UseQueryResult } from '@tanstack/react-query';
 
-declare type AccountAbstractionContracts = {
-    kernelImpl: `0x${string}`;
-    kernelFactory: `0x${string}`;
-    multichainValidator: `0x${string}`;
-};
+declare const ACCOUNT_ABSTRACTION_CONTRACT_FIELDS: readonly ["kernelImpl", "kernelFactory", "multichainValidator"];
+
+declare type AccountAbstractionContractField = (typeof ACCOUNT_ABSTRACTION_CONTRACT_FIELDS)[number];
+
+declare type AccountAbstractionContracts = Record<AccountAbstractionContractField, `0x${string}`>;
 
 declare type ComposeConfigArgs<TConfig extends Config> = {
     wagmi: TConfig;
@@ -46,6 +46,27 @@ declare interface ComposedSignedUserOpsTxReturnType {
     maxPriorityFeePerGas: Hex;
     userOpHashes: Hex[];
 }
+
+export declare class ComposeError extends Error {
+    readonly code: ComposeErrorCode;
+    readonly details?: ComposeErrorDetails;
+    readonly cause?: unknown;
+    constructor(code: ComposeErrorCode, message: string, options?: ComposeErrorOptions);
+}
+
+declare type ComposeErrorCode = 'ACCOUNT_ABSTRACTION_CONTRACTS_MISSING' | 'ACCOUNT_ABSTRACTION_CONTRACT_FIELD_MISSING' | 'ACCOUNT_ABSTRACTION_CONTRACT_ADDRESS_INVALID' | 'OPERATIONS_EMPTY' | 'PUBLIC_CLIENT_NOT_FOUND' | 'WALLET_CLIENT_NOT_AVAILABLE';
+
+declare type ComposeErrorDetails = {
+    chainId?: number;
+    field?: string;
+    method?: string;
+    value?: string;
+};
+
+declare type ComposeErrorOptions = {
+    cause?: unknown;
+    details?: ComposeErrorDetails;
+};
 
 export declare function ComposeProvider<TConfig extends Config>({ children, config }: ComposeProviderProps<TConfig>): ReactElement;
 
@@ -97,6 +118,8 @@ declare const createUserOps: (config: ComposeConfigReturnType, account: CreateKe
     maxFeePerGas: bigint;
     maxPriorityFeePerGas: bigint;
 }>;
+
+export declare const isComposeError: (error: unknown) => error is ComposeError;
 
 declare type PaymasterEndpointArgs<TConfig extends Config> = {
     method: 'pm_getPaymasterStubData' | 'pm_getPaymasterData' | 'pm_sponsorUserOperation';

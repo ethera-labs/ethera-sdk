@@ -37,11 +37,11 @@ export declare type AbiInputsToParams<T extends readonly AbiParameter[]> = {
     [K in T[number] as K['name'] extends string ? K['name'] : never]: AbiParameterToPrimitiveType<K>;
 };
 
-declare type AccountAbstractionContracts = {
-    kernelImpl: `0x${string}`;
-    kernelFactory: `0x${string}`;
-    multichainValidator: `0x${string}`;
-};
+export declare const ACCOUNT_ABSTRACTION_CONTRACT_FIELDS: readonly ["kernelImpl", "kernelFactory", "multichainValidator"];
+
+export declare type AccountAbstractionContractField = (typeof ACCOUNT_ABSTRACTION_CONTRACT_FIELDS)[number];
+
+export declare type AccountAbstractionContracts = Record<AccountAbstractionContractField, `0x${string}`>;
 
 export declare const bigintAbs: (n: bigint) => bigint;
 
@@ -79,6 +79,27 @@ export declare interface ComposedSignedUserOpsTxReturnType {
     maxPriorityFeePerGas: Hex;
     userOpHashes: Hex[];
 }
+
+export declare class ComposeError extends Error {
+    readonly code: ComposeErrorCode;
+    readonly details?: ComposeErrorDetails;
+    readonly cause?: unknown;
+    constructor(code: ComposeErrorCode, message: string, options?: ComposeErrorOptions);
+}
+
+export declare type ComposeErrorCode = 'ACCOUNT_ABSTRACTION_CONTRACTS_MISSING' | 'ACCOUNT_ABSTRACTION_CONTRACT_FIELD_MISSING' | 'ACCOUNT_ABSTRACTION_CONTRACT_ADDRESS_INVALID' | 'OPERATIONS_EMPTY' | 'PUBLIC_CLIENT_NOT_FOUND' | 'WALLET_CLIENT_NOT_AVAILABLE';
+
+export declare type ComposeErrorDetails = {
+    chainId?: number;
+    field?: string;
+    method?: string;
+    value?: string;
+};
+
+declare type ComposeErrorOptions = {
+    cause?: unknown;
+    details?: ComposeErrorDetails;
+};
 
 export declare const composePreparedUserOps: (operations: ComposePreparedUserOpsParams, options?: ComposeUserOpsOptions) => Promise<{
     payload: `0x${string}`;
@@ -158,6 +179,8 @@ export declare type ComposeUserOpsOptions = {
     onPayloadEncoded?: (payload: Hex) => void;
 };
 
+declare type ContractsByChain<TChainId extends number = number> = Partial<Record<TChainId, Partial<Record<AccountAbstractionContractField, `0x${string}`>>>>;
+
 export declare const createAbiEncoder: <T extends Abi = Abi>(abi: T) => AbiEncoder<ExtractAbiFunctions<T, "nonpayable" | "payable">[]>;
 
 export declare function createComposeConfig<TConfig extends Config>(props: ComposeConfigArgs<TConfig>): ComposeConfigReturnType<TConfig>;
@@ -203,6 +226,8 @@ export declare const formatBigintInput: (num: bigint, decimals?: number) => stri
 
 export declare const formatSSV: (num: bigint, decimals?: number) => string;
 
+export declare const getAccountAbstractionContractsForChain: <TChainId extends number>(accountAbstractionContracts: ContractsByChain<TChainId>, chainId: TChainId) => AccountAbstractionContracts;
+
 export declare const globals: {
     MAX_WEI_AMOUNT: bigint;
 };
@@ -215,6 +240,8 @@ export declare const globals: {
  * @param {bigint} [tolerance] - default is `parseUnits("0.0001", 18)`.
  */
 export declare const isBigIntChanged: (a: bigint, b: bigint, tolerance?: bigint) => boolean;
+
+export declare const isComposeError: (error: unknown) => error is ComposeError;
 
 export declare const ms: (value: number, unit: keyof typeof units) => number;
 
@@ -395,5 +422,7 @@ export declare type UserOPCall = {
     value: bigint;
     data: Hex;
 };
+
+export declare const validateAccountAbstractionContracts: <TChainId extends number>(chainIds: readonly TChainId[], accountAbstractionContracts: ContractsByChain<TChainId>) => void;
 
 export { }

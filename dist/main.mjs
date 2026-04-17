@@ -1,11 +1,23 @@
-import { e as entryPointV07, s as stringifyBigints } from "./xt-7DrzMAD9.mjs";
-import { h, g, c, d, f, k, p, q, o, l, n, m, i, r, a, b, j, t } from "./xt-7DrzMAD9.mjs";
+import { v as validateAccountAbstractionContracts, e as entryPointV07, C as ComposeError, s as stringifyBigints } from "./xt-B02KMSXU.mjs";
+import { A, j, h, c, d, f, m, u, w, q, n, p, o, g, k, i, r, a, b, l, t } from "./xt-B02KMSXU.mjs";
 import { getPublicClient } from "@wagmi/core";
 import { encodeFunctionData, formatUnits } from "viem";
 function createComposeConfig(props) {
+  validateAccountAbstractionContracts(
+    props.wagmi.chains.map((chain) => chain.id),
+    props.accountAbstractionContracts
+  );
   return {
     getPaymasterEndpoint: props.getPaymasterEndpoint,
-    getPublicClient: (chainId) => getPublicClient(props.wagmi, { chainId }),
+    getPublicClient: (chainId) => {
+      const publicClient = getPublicClient(props.wagmi, { chainId });
+      if (!publicClient) {
+        throw new ComposeError("PUBLIC_CLIENT_NOT_FOUND", `Public client not found for chain ${chainId}.`, {
+          details: { chainId }
+        });
+      }
+      return publicClient;
+    },
     accountAbstractionContracts: props.accountAbstractionContracts,
     hasPaymaster: Boolean(props.getPaymasterEndpoint),
     entryPoint: entryPointV07
@@ -105,29 +117,33 @@ const tryCatch = (fn) => {
   }
 };
 export {
+  A as ACCOUNT_ABSTRACTION_CONTRACT_FIELDS,
+  ComposeError,
   _percentageFormatter,
-  h as bigintAbs,
-  g as bigintFloor,
+  j as bigintAbs,
+  h as bigintFloor,
   bigintFormatter,
   c as bigintMax,
   d as bigintMin,
   f as bigintRound,
-  k as bigintifyNumbers,
-  p as composePreparedUserOps,
-  q as composeSignedUserOps,
-  o as composeUnpreparedUserOps,
+  m as bigintifyNumbers,
+  u as composePreparedUserOps,
+  w as composeSignedUserOps,
+  q as composeUnpreparedUserOps,
   createAbiEncoder,
   createComposeConfig,
-  l as createSmartAccount,
-  n as createUserOps,
-  m as encodeXtMessage,
+  n as createSmartAccount,
+  p as createUserOps,
+  o as encodeXtMessage,
   entryPointV07,
   ethFormatter,
   extractAbiFunction,
   formatBigintInput,
   formatSSV,
+  g as getAccountAbstractionContractsForChain,
   globals,
-  i as isBigIntChanged,
+  k as isBigIntChanged,
+  i as isComposeError,
   ms,
   numberFormatter,
   paramsToArray,
@@ -135,9 +151,10 @@ export {
   r as rollupA,
   a as rollupB,
   b as rollupsAccountAbstractionContracts,
-  j as roundOperatorFee,
+  l as roundOperatorFee,
   sortNumbers,
   stringifyBigints,
   t as toRpcUserOpCanonical,
-  tryCatch
+  tryCatch,
+  validateAccountAbstractionContracts
 };
