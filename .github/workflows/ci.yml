@@ -3,6 +3,10 @@ name: CI
 on:
   push:
 
+permissions:
+  contents: write
+  pull-requests: write
+
 
 jobs:
   pr-checks:
@@ -51,9 +55,12 @@ jobs:
         run: pnpm build
 
   update-artifacts:
-    name: Build and Commit Artifacts
-    if: github.event_name == 'push' && github.ref != 'refs/heads/main'
+    name: Build and Open Artifacts PR
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    concurrency:
+      group: artifacts-pr-main
+      cancel-in-progress: true
 
     steps:
       - uses: actions/checkout@v6 # v6
@@ -99,20 +106,18 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Commit and push build files
+      - name: Stage build files
         run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-
-          # Stage only the build output (adjust if necessary)
+          # dist is gitignored; force-add to stage artifact updates
           git add dist/ -f
 
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - uses: qoomon/actions--create-commit@dfef4d264de752be6d6195a4d61a2f3d3262d406 # v1
+      - name: Create signed PR with artifact updates
+        uses: peter-evans/create-pull-request@v8.1.0
         with:
-          message: "ci: update artifacts [skip ci]"
-          skip-empty: true
-
-      - run: git push origin || echo "nothing to push"
+          commit-message: "ci: update artifacts [skip ci]"
+          title: "ci: update artifacts"
+          body: "Automated dist update from main build for `${{ github.sha }}`."
+          branch: "ci/update-artifacts"
+          base: "main"
+          delete-branch: true
+          sign-commits: true
