@@ -1,9 +1,8 @@
 import { resolve } from 'path';
 import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
-import { nodePolyfills } from "vite-plugin-node-polyfills";
 
-export default defineConfig(({ mode }) => ({
+export default defineConfig({
   plugins: [
     dts({
       include: ['src/**/*.ts', 'src/**/*.tsx'],
@@ -12,11 +11,6 @@ export default defineConfig(({ mode }) => ({
       outDir: 'dist',
       entryRoot: 'src',
       tsconfigPath: './tsconfig.json'
-    }),
-    nodePolyfills({
-      globals: {
-        Buffer: mode === 'production'
-      }
     })
   ],
   resolve: {
@@ -50,4 +44,4 @@ export default defineConfig(({ mode }) => ({
     },
     outDir: 'dist'
   }
-}));
+});
