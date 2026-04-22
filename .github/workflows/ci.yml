@@ -112,12 +112,23 @@ jobs:
           git add dist/ -f
 
       - name: Create signed PR with artifact updates
+        id: artifact_pr
         uses: peter-evans/create-pull-request@v8.1.0
         with:
-          commit-message: "ci: update artifacts [skip ci]"
+          commit-message: "ci: update artifacts"
           title: "ci: update artifacts"
           body: "Automated dist update from main build for `${{ github.sha }}`."
           branch: "ci/update-artifacts"
           base: "main"
           delete-branch: true
           sign-commits: true
+
+      - name: Enable auto-merge for artifact PR
+        if: ${{ steps.artifact_pr.outputs.pull-request-number != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr merge "${{ steps.artifact_pr.outputs.pull-request-number }}" \
+            --merge \
+            --auto \
+            --delete-branch
