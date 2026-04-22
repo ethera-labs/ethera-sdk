@@ -1,26 +1,26 @@
 import { rollupA, rollupB } from '@/config/chains';
-import { createComposeConfig } from '@/config/create';
+import { createEtheraConfig } from '@/config/create';
 import { rollupsAccountAbstractionContracts } from '@/config/defaults';
-import { ComposeError } from '@/errors';
-import type { ComposeRpcSchema } from '@/types/compose';
+import type { EtheraError } from '@/errors';
+import type { EtheraRpcSchema } from '@/types/ethera';
 import { createConfig, http } from '@wagmi/core';
 import { createPublicClient, rpcSchema } from 'viem';
 import { describe, expect, it } from 'vitest';
 
-describe('createComposeConfig initialization', () => {
+describe('createEtheraConfig initialization', () => {
   const wagmiConfig = createConfig({
     chains: [rollupA, rollupB],
     client(parameters) {
       return createPublicClient({
         chain: parameters.chain,
         transport: http(parameters.chain.rpcUrls.default.http[0]),
-        rpcSchema: rpcSchema<ComposeRpcSchema>()
+        rpcSchema: rpcSchema<EtheraRpcSchema>()
       });
     }
   });
 
-  it('should initialize compose config with rollup chains', () => {
-    const config = createComposeConfig({
+  it('should initialize Ethera config with rollup chains', () => {
+    const config = createEtheraConfig({
       wagmi: wagmiConfig,
       getPaymasterEndpoint({ chainId }) {
         if (chainId === 555555) {
@@ -53,14 +53,14 @@ describe('createComposeConfig initialization', () => {
 
   it('fails fast when contracts are missing for a configured chain', () => {
     expect(() =>
-      createComposeConfig({
+      createEtheraConfig({
         wagmi: wagmiConfig,
         accountAbstractionContracts: {
           [rollupA.id]: rollupsAccountAbstractionContracts
         }
       })
     ).toThrowError(
-      expect.objectContaining<Partial<ComposeError>>({
+      expect.objectContaining<Partial<EtheraError>>({
         code: 'ACCOUNT_ABSTRACTION_CONTRACTS_MISSING',
         details: { chainId: rollupB.id }
       })
@@ -69,7 +69,7 @@ describe('createComposeConfig initialization', () => {
 
   it('fails fast when a required contract field is missing', () => {
     expect(() =>
-      createComposeConfig({
+      createEtheraConfig({
         wagmi: wagmiConfig,
         accountAbstractionContracts: {
           [rollupA.id]: {
@@ -80,7 +80,7 @@ describe('createComposeConfig initialization', () => {
         }
       })
     ).toThrowError(
-      expect.objectContaining<Partial<ComposeError>>({
+      expect.objectContaining<Partial<EtheraError>>({
         code: 'ACCOUNT_ABSTRACTION_CONTRACT_FIELD_MISSING',
         details: { chainId: rollupA.id, field: 'kernelFactory' }
       })
@@ -89,7 +89,7 @@ describe('createComposeConfig initialization', () => {
 
   it('fails fast when a contract address is invalid', () => {
     expect(() =>
-      createComposeConfig({
+      createEtheraConfig({
         wagmi: wagmiConfig,
         accountAbstractionContracts: {
           [rollupA.id]: {
@@ -100,7 +100,7 @@ describe('createComposeConfig initialization', () => {
         }
       })
     ).toThrowError(
-      expect.objectContaining<Partial<ComposeError>>({
+      expect.objectContaining<Partial<EtheraError>>({
         code: 'ACCOUNT_ABSTRACTION_CONTRACT_ADDRESS_INVALID',
         details: { chainId: rollupA.id, field: 'kernelImpl', value: '0x1234' }
       })

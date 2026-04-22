@@ -1,14 +1,20 @@
-import { ComposeError } from '@/errors';
+import { EtheraError } from '@/errors';
 import { getPaymasterDataForChain } from '@/api/paymaster';
-import type { ComposeConfigReturnType } from '@/config/create';
-import type { ComposedSignedUserOpsTxReturnType } from '@/main';
+import type {
+  EtheraConfigReturnType,
+  EtheraPublicClient,
+  PreparedUserOps,
+  SignedUserOps,
+  UnpreparedUserOps,
+  UserOpCall,
+  UserOpsOptions,
+  UserOpsParams
+} from '@/types';
 import { encodeXtMessage, toRpcUserOpCanonical } from '@/main';
-import type { ComposeRpcSchema } from '@/types/compose';
-import type { SignUserOperationsRequest } from '@zerodev/multi-chain-ecdsa-validator';
 import { prepareAndSignUserOperations, signUserOperations } from '@zerodev/multi-chain-ecdsa-validator';
 import type { CreateKernelAccountReturnType } from '@zerodev/sdk';
-import type { Chain, Client, PublicClient, Transport } from 'viem';
-import { type Address, type Hex } from 'viem';
+import type { Chain, Client, Transport } from 'viem';
+import { type Hex } from 'viem';
 import type { GetPaymasterDataParameters, PaymasterActions, SmartAccount } from 'viem/account-abstraction';
 
 const FALLBACK_CALL_GAS_LIMIT = 900_000n;
@@ -19,13 +25,21 @@ const withMargin = (value: bigint, marginPct = 25n) => value + (value * marginPc
 
 const assertOperationsNotEmpty = (operations: unknown[], method: string) => {
   if (operations.length === 0) {
-    throw new ComposeError('OPERATIONS_EMPTY', `${method} requires at least one operation.`, {
+    throw new EtheraError('OPERATIONS_EMPTY', `${method} requires at least one operation.`, {
       details: { method }
     });
   }
 };
 
-const toExplorerUrl = (hash: Hex, publicClient: PublicClient<Transport, Chain, SmartAccount, ComposeRpcSchema>) => {
+const assertCallsNotEmpty = (calls: UserOpCall[], method: string, operationIndex?: number) => {
+  if (calls.length === 0) {
+    throw new EtheraError('CALLS_EMPTY', `${method} requires at least one call per operation.`, {
+      details: { method, operationIndex }
+    });
+  }
+};
+
+const toExplorerUrl = (hash: Hex, publicClient: EtheraPublicClient) => {
   const explorerUrl = publicClient.chain?.blockExplorers?.default?.url;
 
   if (!explorerUrl) {
@@ -39,21 +53,72 @@ const toExplorerUrl = (hash: Hex, publicClient: PublicClient<Transport, Chain, S
   }
 };
 
-export type UserOPCall = {
-  to: Address;
-  value: bigint;
-  data: Hex;
+const validateUserOpComposition = (operations: UserOpsParams) => {
+  assertOperationsNotEmpty(operations, 'composeUserOps');
+
+  operations.forEach((operation, operationIndex) => {
+    const { smartAccount, calls } = operation;
+
+    assertCallsNotEmpty(calls, 'composeUserOps', operationIndex);
+
+    if (
+      !smartAccount?.account ||
+      typeof smartAccount.account.createUserOp !== 'function' ||
+      !smartAccount.publicClient
+    ) {
+      throw new EtheraError(
+        'SMART_ACCOUNT_INVALID',
+        'composeUserOps requires smartAccount objects returned by createSmartAccount or useSmartAccount.',
+        {
+          details: { method: 'composeUserOps', operationIndex }
+        }
+      );
+    }
+
+    const accountChainId = smartAccount.account.client?.chain?.id;
+    const publicClientChainId = smartAccount.publicClient.chain?.id;
+
+    if (!accountChainId || !publicClientChainId) {
+      throw new EtheraError(
+        'SMART_ACCOUNT_INVALID',
+        'composeUserOps requires smart accounts with chain-aware account and public client instances.',
+        {
+          details: { method: 'composeUserOps', operationIndex, chainId: publicClientChainId ?? accountChainId }
+        }
+      );
+    }
+
+    if (accountChainId !== publicClientChainId) {
+      throw new EtheraError(
+        'CHAIN_ID_MISMATCH',
+        `composeUserOps received mismatched chain IDs for operation ${operationIndex}.`,
+        {
+          details: {
+            method: 'composeUserOps',
+            operationIndex,
+            chainId: publicClientChainId,
+            expected: String(publicClientChainId),
+            received: String(accountChainId)
+          }
+        }
+      );
+    }
+  });
 };
 
 export const createUserOps = async (
-  config: ComposeConfigReturnType,
+  config: EtheraConfigReturnType,
   account: CreateKernelAccountReturnType<'0.7'>,
-  calls: UserOPCall[]
+  calls: UserOpCall[]
 ) => {
+  assertCallsNotEmpty(calls, 'createUserOps');
+
   const chainId = account.client.chain!.id;
   const publicClient = config.getPublicClient(chainId);
   if (!publicClient) {
-    throw new Error(`Public client not found for chain ${chainId}`);
+    throw new EtheraError('PUBLIC_CLIENT_NOT_FOUND', `Public client not found for chain ${chainId}.`, {
+      details: { method: 'createUserOps', chainId }
+    });
   }
 
   // Estimate gas for each call
@@ -123,24 +188,17 @@ export const createUserOps = async (
   };
 };
 
-export type CreateUserOPReturnType = Awaited<ReturnType<typeof createUserOps>>;
+export const composeUserOps = async (operations: UserOpsParams, options: UserOpsOptions = {}) => {
+  validateUserOpComposition(operations);
 
-type ComposeUnpreparedUserOpsParams = {
-  account: CreateKernelAccountReturnType;
-  publicClient: PublicClient<Transport, Chain, SmartAccount, ComposeRpcSchema>;
-  userOp: CreateUserOPReturnType;
-}[];
+  const unpreparedOperations = await Promise.all(
+    operations.map(({ smartAccount, calls }) => smartAccount.account.createUserOp(calls))
+  );
 
-export type ComposeUserOpsOptions = {
-  onSigned?: (signedOps: ReturnType<typeof toRpcUserOpCanonical>[]) => void;
-  onComposed?: (builds: ComposedSignedUserOpsTxReturnType[], explorerUrls: string[]) => void;
-  onPayloadEncoded?: (payload: Hex) => void;
+  return composeUnpreparedUserOps(unpreparedOperations, options);
 };
 
-export const composeUnpreparedUserOps = async (
-  operations: ComposeUnpreparedUserOpsParams,
-  options: ComposeUserOpsOptions = {}
-) => {
+export const composeUnpreparedUserOps = async (operations: UnpreparedUserOps, options: UserOpsOptions = {}) => {
   assertOperationsNotEmpty(operations, 'composeUnpreparedUserOps');
 
   const signedCanonicalOps = (
@@ -158,16 +216,7 @@ export const composeUnpreparedUserOps = async (
   );
 };
 
-type ComposePreparedUserOpsParams = {
-  account: CreateKernelAccountReturnType;
-  publicClient: PublicClient<Transport, Chain, SmartAccount, ComposeRpcSchema>;
-  userOp: SignUserOperationsRequest;
-}[];
-
-export const composePreparedUserOps = async (
-  operations: ComposePreparedUserOpsParams,
-  options: ComposeUserOpsOptions = {}
-) => {
+export const composePreparedUserOps = async (operations: PreparedUserOps, options: UserOpsOptions = {}) => {
   assertOperationsNotEmpty(operations, 'composePreparedUserOps');
 
   const unsignedUserOps = operations.map((op) => op.userOp);
@@ -189,15 +238,7 @@ export const composePreparedUserOps = async (
   );
 };
 
-export type composeSignedUserOpsParams = {
-  signedCanonicalOps: ReturnType<typeof toRpcUserOpCanonical>;
-  publicClient: PublicClient<Transport, Chain, SmartAccount, ComposeRpcSchema>;
-}[];
-
-export const composeSignedUserOps = async (
-  operations: composeSignedUserOpsParams,
-  options: ComposeUserOpsOptions = {}
-) => {
+export const composeSignedUserOps = async (operations: SignedUserOps, options: UserOpsOptions = {}) => {
   assertOperationsNotEmpty(operations, 'composeSignedUserOps');
 
   const builds = await Promise.all(
@@ -220,6 +261,8 @@ export const composeSignedUserOps = async (
       rawTx: build.raw as `0x${string}`
     }))
   });
+
+  options.onPayloadEncoded?.(payload);
 
   return {
     payload,

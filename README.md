@@ -67,15 +67,15 @@ npm install @wagmi/core wagmi viem @tanstack/react-query react
 
 ### 1. Setup Configuration
 
-First, create your compose configuration:
+First, create your Ethera configuration:
 
 ```typescript
 // config.ts
-import { createComposeConfig } from '@ssv-labs/ethera-sdk';
+import { createEtheraConfig } from '@ssv-labs/ethera-sdk';
 import { createConfig, http } from '@wagmi/core';
 import { createPublicClient, rpcSchema } from 'viem';
 import { rollupA, rollupB, rollupsAccountAbstractionContracts } from '@ssv-labs/ethera-sdk';
-import type { ComposeRpcSchema } from '@ssv-labs/ethera-sdk';
+import type { EtheraRpcSchema } from '@ssv-labs/ethera-sdk';
 
 // Create wagmi config
 export const wagmiConfig = createConfig({
@@ -84,13 +84,13 @@ export const wagmiConfig = createConfig({
     return createPublicClient({
       chain: parameters.chain,
       transport: http(parameters.chain.rpcUrls.default.http[0]),
-      rpcSchema: rpcSchema<ComposeRpcSchema>()
+      rpcSchema: rpcSchema<EtheraRpcSchema>()
     });
   }
 });
 
-// Create compose config
-export const composeConfig = createComposeConfig({
+// Create Ethera config
+export const etheraConfig = createEtheraConfig({
   wagmi: wagmiConfig,
   accountAbstractionContracts: {
     // Use predefined contracts
@@ -110,12 +110,12 @@ export const composeConfig = createComposeConfig({
 
 Wrap your app with the required providers:
 
-```typescript
+```tsx
 // App.tsx
 import { WagmiProvider } from 'wagmi';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ComposeProvider } from '@ssv-labs/ethera-sdk/react';
-import { wagmiConfig, composeConfig } from './config';
+import { EtheraProvider } from '@ssv-labs/ethera-sdk/react';
+import { wagmiConfig, etheraConfig } from './config';
 
 const queryClient = new QueryClient();
 
@@ -123,9 +123,9 @@ function App() {
   return (
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
-        <ComposeProvider config={composeConfig}>
+        <EtheraProvider config={etheraConfig}>
           <YourApp />
-        </ComposeProvider>
+        </EtheraProvider>
       </QueryClientProvider>
     </WagmiProvider>
   );
@@ -136,7 +136,7 @@ function App() {
 
 Use the `useSmartAccount` hook in your components:
 
-```typescript
+```tsx
 // MyComponent.tsx
 import { useSmartAccount } from '@ssv-labs/ethera-sdk/react';
 import { rollupA, rollupB } from '@ssv-labs/ethera-sdk';
@@ -163,7 +163,7 @@ function MyComponent() {
 
 ### Configuration
 
-The `createComposeConfig` function sets up the SDK with your wagmi configuration and account abstraction contracts. It requires:
+The `createEtheraConfig` function sets up the SDK with your wagmi configuration and account abstraction contracts. It requires:
 
 - **wagmi**: Your wagmi config instance
 - **accountAbstractionContracts**: A mapping of chain IDs to their account abstraction contract addresses
@@ -173,7 +173,7 @@ The `createComposeConfig` function sets up the SDK with your wagmi configuration
 
 The SDK provides React hooks for easy integration:
 
-- **`useComposeConfig`**: Access the compose configuration from context
+- **`useEtheraConfig`**: Access the Ethera configuration from context
 - **`useSmartAccount`**: Create and access a smart account for a specific chain
 
 ### User Operations
@@ -189,7 +189,7 @@ User operations are created via the `createUserOp` method on smart accounts retu
 
 ### Basic Smart Account Usage
 
-```typescript
+```tsx
 import { useSmartAccount } from '@ssv-labs/ethera-sdk/react';
 import { rollupA } from '@ssv-labs/ethera-sdk';
 import { useAccount } from 'wagmi';
@@ -219,9 +219,9 @@ function SmartAccountDisplay() {
 
 ### Creating and Sending User Operations
 
-```typescript
-import { useSmartAccount, useComposeConfig } from '@ssv-labs/ethera-sdk/react';
-import { createAbiEncoder, composeUnpreparedUserOps } from '@ssv-labs/ethera-sdk';
+```tsx
+import { useSmartAccount } from '@ssv-labs/ethera-sdk/react';
+import { composeUserOps, createAbiEncoder } from '@ssv-labs/ethera-sdk';
 import { erc20Abi } from 'viem';
 import { rollupA, rollupB } from '@ssv-labs/ethera-sdk';
 import { useMutation } from '@tanstack/react-query';
@@ -245,31 +245,35 @@ function TokenApproval() {
       // Create ABI encoder for ERC20
       const erc20 = createAbiEncoder(erc20Abi);
 
-      // Create user operations for each chain
-      const userOpA = await smartAccountA.account.createUserOp([
+      // Create and compose user operations in one step
+      const composed = await composeUserOps([
         {
-          to: '0x...', // Token address on chain A
-          value: 0n,
-          data: erc20.approve({
-            spender: '0x...',
-            amount: 10000000000000000000n
-          })
+          smartAccount: smartAccountA,
+          calls: [
+            {
+              to: '0x...', // Token address on chain A
+              value: 0n,
+              data: erc20.approve({
+                spender: '0x...',
+                amount: 10000000000000000000n
+              })
+            }
+          ]
+        },
+        {
+          smartAccount: smartAccountB,
+          calls: [
+            {
+              to: '0x...', // Token address on chain B
+              value: 0n,
+              data: erc20.approve({
+                spender: '0x...',
+                amount: 10000000000000000000n
+              })
+            }
+          ]
         }
       ]);
-
-      const userOpB = await smartAccountB.account.createUserOp([
-        {
-          to: '0x...', // Token address on chain B
-          value: 0n,
-          data: erc20.approve({
-            spender: '0x...',
-            amount: 10000000000000000000n
-          })
-        }
-      ]);
-
-      // Compose user operations
-      const composed = await composeUnpreparedUserOps([userOpA, userOpB]);
 
       // Send the composed transactions
       const result = await composed.send();
@@ -327,7 +331,7 @@ function TokenApproval() {
 
 ### Multi-Chain Smart Account
 
-```typescript
+```tsx
 import { useSmartAccount } from '@ssv-labs/ethera-sdk/react';
 import { rollupA, rollupB } from '@ssv-labs/ethera-sdk';
 
@@ -358,15 +362,15 @@ function MultiChainComponent() {
 }
 ```
 
-### Using useComposeConfig
+### Using useEtheraConfig
 
-Access the compose configuration directly if needed:
+Access the Ethera configuration directly if needed:
 
-```typescript
-import { useComposeConfig } from '@ssv-labs/ethera-sdk/react';
+```tsx
+import { useEtheraConfig } from '@ssv-labs/ethera-sdk/react';
 
 function ConfigInfo() {
-  const config = useComposeConfig();
+  const config = useEtheraConfig();
 
   // Access configuration properties
   const hasPaymaster = config.hasPaymaster;
@@ -383,9 +387,9 @@ function ConfigInfo() {
 
 ### Complete Example with ABI Encoding
 
-```typescript
+```tsx
 import { useSmartAccount } from '@ssv-labs/ethera-sdk/react';
-import { createAbiEncoder, composeUnpreparedUserOps } from '@ssv-labs/ethera-sdk';
+import { composeUserOps, createAbiEncoder } from '@ssv-labs/ethera-sdk';
 import { erc20Abi } from 'viem';
 import { rollupA } from '@ssv-labs/ethera-sdk';
 import { useMutation } from '@tanstack/react-query';
@@ -404,20 +408,22 @@ function CompleteExample() {
       // Create ABI encoder
       const erc20 = createAbiEncoder(erc20Abi);
 
-      // Create user operation
-      const userOp = await smartAccount.account.createUserOp([
+      // Compose and send the user operation
+      const composed = await composeUserOps([
         {
-          to: '0x...', // Token address
-          value: 0n,
-          data: erc20.transfer({
-            to: '0x...', // Recipient
-            amount: 1000000000000000000n // 1 token
-          })
+          smartAccount,
+          calls: [
+            {
+              to: '0x...', // Token address
+              value: 0n,
+              data: erc20.transfer({
+                to: '0x...', // Recipient
+                amount: 1000000000000000000n // 1 token
+              })
+            }
+          ]
         }
       ]);
-
-      // Compose and send the user operation
-      const composed = await composeUnpreparedUserOps([userOp]);
 
       // Send the transaction
       const result = await composed.send();
@@ -474,16 +480,16 @@ function CompleteExample() {
 
 ## API Reference
 
-### `createComposeConfig`
+### `createEtheraConfig`
 
-Creates a compose configuration instance.
+Creates an Ethera configuration instance.
 
 ```typescript
-import { createComposeConfig } from '@ssv-labs/ethera-sdk';
+import { createEtheraConfig } from '@ssv-labs/ethera-sdk';
 
-function createComposeConfig<TConfig extends Config>(
-  props: ComposeConfigArgs<TConfig>
-): ComposeConfigReturnType<TConfig>;
+function createEtheraConfig<TConfig extends Config>(
+  props: EtheraConfigArgs<TConfig>
+): EtheraConfigReturnType<TConfig>;
 ```
 
 **Parameters:**
@@ -492,38 +498,38 @@ function createComposeConfig<TConfig extends Config>(
 - `accountAbstractionContracts`: Mapping of chain IDs to contract addresses
 - `getPaymasterEndpoint?`: Optional function to get paymaster endpoints
 
-**Returns:** Compose configuration object
+**Returns:** Ethera configuration object
 
 ### React Hooks
 
-#### `ComposeProvider`
+#### `EtheraProvider`
 
-React context provider for compose configuration. Must wrap your app to use other hooks.
+React context provider for Ethera configuration. Must wrap your app to use other hooks.
 
 ```typescript
-import { ComposeProvider } from '@ssv-labs/ethera-sdk/react';
+import { EtheraProvider } from '@ssv-labs/ethera-sdk/react';
 
-function ComposeProvider<TConfig extends Config>({ children, config }: ComposeProviderProps<TConfig>): ReactElement;
+function EtheraProvider<TConfig extends Config>({ children, config }: EtheraProviderProps<TConfig>): ReactElement;
 ```
 
 **Props:**
 
-- `config`: Compose configuration object created with `createComposeConfig`
+- `config`: Ethera configuration object created with `createEtheraConfig`
 - `children`: React children
 
-#### `useComposeConfig`
+#### `useEtheraConfig`
 
-Hook to access compose configuration from context. Must be used within a `ComposeProvider`.
+Hook to access Ethera configuration from context. Must be used within an `EtheraProvider`.
 
 ```typescript
-import { useComposeConfig } from '@ssv-labs/ethera-sdk/react';
+import { useEtheraConfig } from '@ssv-labs/ethera-sdk/react';
 
-function useComposeConfig<TConfig extends Config>(): ComposeConfigReturnType<TConfig>;
+function useEtheraConfig<TConfig extends Config>(): EtheraConfigReturnType<TConfig>;
 ```
 
-**Returns:** Compose configuration object
+**Returns:** Ethera configuration object
 
-**Throws:** Error if used outside of `ComposeProvider`
+**Throws:** Error if used outside of `EtheraProvider`
 
 #### `useSmartAccount`
 
@@ -580,7 +586,62 @@ const approveData = erc20.approve({
 
 **Returns:** Encoder object with methods for each function in the ABI
 
+#### `composeUserOps`
+
+Default high-level helper for atomic single-chain or cross-chain execution.
+
+```typescript
+import { composeUserOps } from '@ssv-labs/ethera-sdk';
+
+const composed = await composeUserOps([
+  {
+    smartAccount: smartAccountA,
+    calls: [
+      {
+        to: '0x...',
+        value: 0n,
+        data: '0x...'
+      }
+    ]
+  },
+  {
+    smartAccount: smartAccountB,
+    calls: [
+      {
+        to: '0x...',
+        value: 0n,
+        data: '0x...'
+      }
+    ]
+  }
+]);
+
+const result = await composed.send();
+const receipts = await result.wait();
+```
+
+**Parameters:**
+
+- `operations`: Array of operations to compose. Each operation contains:
+  - `smartAccount`: Object returned by `createSmartAccount` or `useSmartAccount`
+  - `calls`: Array of calls for that chain
+- `options?`: Optional callbacks:
+  - `onSigned?`: Called when operations are signed
+  - `onComposed?`: Called when transactions are built
+  - `onPayloadEncoded?`: Called when the XT payload is encoded
+
+**Validation:**
+
+- Rejects empty operation arrays with `OPERATIONS_EMPTY`
+- Rejects operations without calls with `CALLS_EMPTY`
+- Rejects non-compatible smart account objects with `SMART_ACCOUNT_INVALID`
+- Rejects chain mismatches between account and public client with `CHAIN_ID_MISMATCH`
+
+**Returns:** Same return shape as `composeUnpreparedUserOps`
+
 #### `composeUnpreparedUserOps`
+
+Lower-level helper for composing objects already returned by `createUserOp`.
 
 Composes multiple user operations for atomic cross-chain execution.
 
@@ -645,7 +706,7 @@ type AccountAbstractionContracts = {
 To enable paymaster support, provide a `getPaymasterEndpoint` function:
 
 ```typescript
-const composeConfig = createComposeConfig({
+const etheraConfig = createEtheraConfig({
   wagmi: wagmiConfig,
   accountAbstractionContracts: {
     /* ... */
@@ -741,7 +802,7 @@ const userOp = await smartAccount.account.createUserOp([
 
 For complete working examples, see the test files:
 
-- [`src/__tests__/react/compose-provider.test.tsx`](src/__tests__/react/compose-provider.test.tsx) - React integration example
+- [`src/__tests__/react/ethera-provider.test.tsx`](src/__tests__/react/ethera-provider.test.tsx) - React integration example
 
 ## Development
 

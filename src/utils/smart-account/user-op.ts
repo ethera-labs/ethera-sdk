@@ -1,8 +1,8 @@
-import type { Address, Hex } from 'viem';
+import type { CanonicalUserOp } from '@/types/user-op';
 import { concatHex, isHex, toHex, zeroAddress } from 'viem';
 import type { PrepareUserOperationReturnType } from 'viem/account-abstraction';
 
-export function toRpcUserOpCanonical(op: PrepareUserOperationReturnType) {
+export function toRpcUserOpCanonical(op: PrepareUserOperationReturnType): CanonicalUserOp {
   const hx = (v: string | bigint) =>
     typeof v === 'string' && isHex(v as `0x${string}`) ? (v as `0x${string}`) : toHex(BigInt(v || '0'));
 
@@ -15,7 +15,6 @@ export function toRpcUserOpCanonical(op: PrepareUserOperationReturnType) {
             op.factoryData as `0x${string}`
           ])
         : '0x';
-
 
   return {
     sender: op.sender,
@@ -35,15 +34,4 @@ export function toRpcUserOpCanonical(op: PrepareUserOperationReturnType) {
     paymasterPostOpGasLimit: hx(op.paymasterPostOpGasLimit!),
     signature: op.signature ?? '0x'
   };
-}
-
-export interface ComposedSignedUserOpsTxReturnType {
-  raw: Hex;
-  hash: Hex;
-  to: Address;
-  chainId: number;
-  gas: Hex;
-  maxFeePerGas: Hex;
-  maxPriorityFeePerGas: Hex;
-  userOpHashes: Hex[];
 }

@@ -1,4 +1,4 @@
-import { ComposeError } from '@/errors';
+import { EtheraError } from '@/errors';
 import { isAddress } from 'viem';
 
 export const ACCOUNT_ABSTRACTION_CONTRACT_FIELDS = ['kernelImpl', 'kernelFactory', 'multichainValidator'] as const;
@@ -18,7 +18,7 @@ export const getAccountAbstractionContractsForChain = <TChainId extends number>(
   const contracts = accountAbstractionContracts[chainId];
 
   if (!contracts) {
-    throw new ComposeError(
+    throw new EtheraError(
       'ACCOUNT_ABSTRACTION_CONTRACTS_MISSING',
       `Account abstraction contracts not found for chain ${chainId}.`,
       { details: { chainId } }
@@ -29,7 +29,7 @@ export const getAccountAbstractionContractsForChain = <TChainId extends number>(
     const address = contracts[field];
 
     if (!address) {
-      throw new ComposeError(
+      throw new EtheraError(
         'ACCOUNT_ABSTRACTION_CONTRACT_FIELD_MISSING',
         `Missing required account abstraction contract "${field}" for chain ${chainId}.`,
         { details: { chainId, field } }
@@ -37,7 +37,7 @@ export const getAccountAbstractionContractsForChain = <TChainId extends number>(
     }
 
     if (!isAddress(address)) {
-      throw new ComposeError(
+      throw new EtheraError(
         'ACCOUNT_ABSTRACTION_CONTRACT_ADDRESS_INVALID',
         `Invalid "${field}" address for chain ${chainId}: ${address}.`,
         { details: { chainId, field, value: address } }

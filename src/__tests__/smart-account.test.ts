@@ -1,6 +1,6 @@
 import { createSmartAccount } from '@/utils/smart-account/create';
-import type { ComposeConfigReturnType } from '@/config/create';
-import type { ComposeRpcSchema } from '@/types/compose';
+import type { EtheraConfigReturnType } from '@/types';
+import type { EtheraRpcSchema } from '@/types/ethera';
 import { toMultiChainECDSAValidator } from '@zerodev/multi-chain-ecdsa-validator';
 import { createKernelAccount } from '@zerodev/sdk';
 import type { Chain, PublicClient, Transport } from 'viem';
@@ -19,9 +19,9 @@ describe('createSmartAccount', () => {
   it('fails before smart-account creation when required contracts are missing', async () => {
     const publicClient = {
       chain: { id: 1 }
-    } as unknown as PublicClient<Transport, Chain, SmartAccount, ComposeRpcSchema>;
+    } as unknown as PublicClient<Transport, Chain, SmartAccount, EtheraRpcSchema>;
 
-    const config: ComposeConfigReturnType = {
+    const config: EtheraConfigReturnType = {
       getPublicClient: vi.fn(() => publicClient),
       hasPaymaster: false,
       getPaymasterEndpoint: undefined,

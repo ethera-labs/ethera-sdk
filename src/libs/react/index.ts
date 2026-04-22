@@ -1,4 +1,4 @@
-export { ComposeProvider, useComposeConfig } from './compose-provider';
-export type { ComposeProviderProps } from './compose-provider';
-export { ComposeError, isComposeError } from '@/errors';
+export { EtheraProvider, useEtheraConfig } from './ethera-provider';
+export type { EtheraProviderProps } from '@/types/react';
+export { EtheraError, isEtheraError } from '@/errors';
 export { useSmartAccount } from './hooks/use-smart-account';
