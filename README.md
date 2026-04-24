@@ -26,6 +26,7 @@ The Ethera SDK is a **React-first** TypeScript library for Account Abstraction (
 - **TypeScript**: Full TypeScript support with comprehensive type definitions
 - **Gas Estimation**: Automatic gas estimation with fallback mechanisms
 - **ABI Encoding Utilities**: Helper functions for encoding contract function calls
+- **Bridge Recipe Helper**: `composeBridgeTransfer` for scoped coordinated cross chain bridge flows across source and destination smart accounts
 
 ## Installation
 
@@ -478,6 +479,89 @@ function CompleteExample() {
 }
 ```
 
+### Bridge Recipe for Coordinated Cross Chain Smart-Account Flows
+
+Use `composeBridgeTransfer` when your bridge flow follows this pattern:
+
+- A source smart account gathers or wraps the asset, then calls a source bridge contract.
+- A destination smart account calls a destination bridge contract to finalize receipt.
+- The destination smart account optionally pays the bridged asset out to a recipient.
+
+This matches bridge designs where both sides participate in one composed cross-chain operation instead of treating bridging as a single contract call on the source chain.
+
+```tsx
+import { composeBridgeTransfer } from '@ssv-labs/ethera-sdk';
+import { useSmartAccount } from '@ssv-labs/ethera-sdk/react';
+
+function BridgeExample() {
+  const { data: sourceSmartAccount } = useSmartAccount({ chainId: 1, multiChainIds: [1, 2] });
+  const { data: destinationSmartAccount } = useSmartAccount({ chainId: 2, multiChainIds: [1, 2] });
+
+  const send = async () => {
+    if (!sourceSmartAccount || !destinationSmartAccount) {
+      throw new Error('Smart accounts not ready');
+    }
+
+    const composed = await composeBridgeTransfer({
+      sourceSmartAccount,
+      destinationSmartAccount,
+      sourceBridge: '0xSourceBridge',
+      destinationBridge: '0xDestinationBridge',
+      sessionId: 123n,
+      recipient: '0xRecipient',
+      asset: {
+        kind: 'erc20',
+        token: '0xToken',
+        amount: 1_000_000n,
+        sourceOwner: '0xUserEoa'
+      }
+    });
+
+    return composed.send();
+  };
+
+  return <button onClick={send}>Bridge</button>;
+}
+```
+
+Bridge caveats:
+
+- `composeBridgeTransfer` is intentionally narrow. It targets bridges that expose paired `send(...)` and `receiveTokens(...)` entrypoints across source and destination chains. If your bridge ABI differs, use `composeUserOps` directly.
+- More specifically, the helper assumes:
+  - a source-side `send(otherChainId, token, sender, receiver, amount, sessionId, destBridge)` function
+  - a destination-side `receiveTokens(otherChainId, sender, receiver, sessionId, srcBridge)` function
+  - optional wrapped-native `deposit()` and `withdraw(uint256)` calls when bridging native assets
+- If your bridge contracts use different function names, parameter ordering, extra payload fields, different receiver semantics, or direct-recipient settlement instead of destination-smart-account settlement, this helper is not the right abstraction. Build the operations manually with `composeUserOps`.
+- For ERC20 bridging with `sourceOwner`, the required token allowance is from the owner EOA to the source smart account, not to the bridge. The helper does not submit that prerequisite approval transaction.
+- For native bridging, the source smart account must already hold enough native token to wrap and bridge. Funding the smart account is a separate prerequisite transaction.
+- The helper assumes the bridge contract semantics used by this recipe: the source side sends into the source bridge, the destination side finalizes with `receiveTokens(...)`, and the bridged funds are first credited to the destination smart account before any optional payout.
+- Only the composed source/destination user operations are atomic together. Any prerequisite approval or funding transaction happens outside that atomic bundle.
+- Failure semantics are split across two stages:
+  - If a prerequisite approval or funding transaction fails, the composed bridge transaction is never submitted.
+  - If the composed bridge transaction is submitted but one of the source or destination user operations fails during execution, the overall composed bundle should be treated as failed. Callers should not assume the optional destination payout happened unless the composed transaction succeeds and the destination-side effects are confirmed.
+- `composeBridgeTransfer` only builds the call plan. It does not inspect bridge acknowledgements, decode bridge-specific events, or add any post-execution recovery logic.
+
+### Private-Key / Backend Flow with `encodeXtMessage`
+
+`encodeXtMessage` is exported from the package root and can be used directly when your backend already has signed raw transactions and only needs to build the `eth_sendXTransaction` payload.
+
+```typescript
+import { encodeXtMessage } from '@ssv-labs/ethera-sdk';
+
+const payload = encodeXtMessage({
+  senderId: 'backend-service',
+  entries: [
+    { chainId: 42161, rawTx: '0xSignedRawTxOnArbitrum' },
+    { chainId: 8453, rawTx: '0xSignedRawTxOnBase' }
+  ]
+});
+
+await publicClient.request({
+  method: 'eth_sendXTransaction',
+  params: [payload]
+});
+```
+
 ## API Reference
 
 ### `createEtheraConfig`
@@ -530,6 +614,52 @@ function useEtheraConfig<TConfig extends Config>(): EtheraConfigReturnType<TConf
 **Returns:** Ethera configuration object
 
 **Throws:** Error if used outside of `EtheraProvider`
+
+### `composeBridgeTransfer`
+
+Scoped recipe for Compose-style bridge flows that build source and destination user operations together.
+
+```typescript
+import { composeBridgeTransfer } from '@ssv-labs/ethera-sdk';
+
+await composeBridgeTransfer({
+  sourceSmartAccount,
+  destinationSmartAccount,
+  sourceBridge: '0x...',
+  destinationBridge: '0x...',
+  sessionId: 1n,
+  recipient: '0x...', // optional, defaults to the destination smart account
+  asset: {
+    kind: 'erc20',
+    token: '0x...',
+    amount: 1n,
+    sourceOwner: '0x...' // optional, adds transferFrom(owner -> source smart account)
+  }
+});
+```
+
+For native assets, pass:
+
+```typescript
+asset: {
+  kind: 'native',
+  amount: 1n,
+  wrappedToken: '0x...'
+}
+```
+
+### `encodeXtMessage`
+
+Low-level utility that encodes multiple signed raw transactions into the XT payload consumed by `eth_sendXTransaction`.
+
+```typescript
+import { encodeXtMessage } from '@ssv-labs/ethera-sdk';
+
+const payload = encodeXtMessage({
+  senderId: 'client',
+  entries: [{ chainId: 1, rawTx: '0x...' }]
+});
+```
 
 #### `useSmartAccount`
 
