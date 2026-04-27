@@ -1,15 +1,17 @@
-import { B as slice, C as toFunctionSelector, D as formatAbiItem, E as AbiFunctionSignatureNotFoundError, F as decodeAbiParameters, G as getAbiItem, H as AbiErrorNotFoundError, I as AbiErrorInputsNotFoundError, J as encodeAbiParameters, K as concatHex, L as AbiFunctionNotFoundError, M as AbiFunctionOutputsNotFoundError, N as InvalidArrayError, O as BaseError, P as getUrl, Q as stringify, R as batchGatewayAbi, S as solidityError, T as decodeErrorResult, U as isAddressEqual, V as call, W as concat, X as HttpRequestError, Y as isHex } from "./xt-BIgtj6Se.mjs";
+"use strict";
+Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
+const xt = require("./xt-CJ_buhDd.js");
 function decodeFunctionData(parameters) {
   const { abi, data } = parameters;
-  const signature = slice(data, 0, 4);
-  const description = abi.find((x) => x.type === "function" && signature === toFunctionSelector(formatAbiItem(x)));
+  const signature = xt.slice(data, 0, 4);
+  const description = abi.find((x) => x.type === "function" && signature === xt.toFunctionSelector(xt.formatAbiItem(x)));
   if (!description)
-    throw new AbiFunctionSignatureNotFoundError(signature, {
+    throw new xt.AbiFunctionSignatureNotFoundError(signature, {
       docsPath: "/docs/contract/decodeFunctionData"
     });
   return {
     functionName: description.name,
-    args: "inputs" in description && description.inputs && description.inputs.length > 0 ? decodeAbiParameters(description.inputs, slice(data, 4)) : void 0
+    args: "inputs" in description && description.inputs && description.inputs.length > 0 ? xt.decodeAbiParameters(description.inputs, xt.slice(data, 4)) : void 0
   };
 }
 const docsPath$1 = "/docs/contract/encodeErrorResult";
@@ -17,37 +19,37 @@ function encodeErrorResult(parameters) {
   const { abi, errorName, args } = parameters;
   let abiItem = abi[0];
   if (errorName) {
-    const item = getAbiItem({ abi, args, name: errorName });
+    const item = xt.getAbiItem({ abi, args, name: errorName });
     if (!item)
-      throw new AbiErrorNotFoundError(errorName, { docsPath: docsPath$1 });
+      throw new xt.AbiErrorNotFoundError(errorName, { docsPath: docsPath$1 });
     abiItem = item;
   }
   if (abiItem.type !== "error")
-    throw new AbiErrorNotFoundError(void 0, { docsPath: docsPath$1 });
-  const definition = formatAbiItem(abiItem);
-  const signature = toFunctionSelector(definition);
+    throw new xt.AbiErrorNotFoundError(void 0, { docsPath: docsPath$1 });
+  const definition = xt.formatAbiItem(abiItem);
+  const signature = xt.toFunctionSelector(definition);
   let data = "0x";
   if (args && args.length > 0) {
     if (!abiItem.inputs)
-      throw new AbiErrorInputsNotFoundError(abiItem.name, { docsPath: docsPath$1 });
-    data = encodeAbiParameters(abiItem.inputs, args);
+      throw new xt.AbiErrorInputsNotFoundError(abiItem.name, { docsPath: docsPath$1 });
+    data = xt.encodeAbiParameters(abiItem.inputs, args);
   }
-  return concatHex([signature, data]);
+  return xt.concatHex([signature, data]);
 }
 const docsPath = "/docs/contract/encodeFunctionResult";
 function encodeFunctionResult(parameters) {
   const { abi, functionName, result } = parameters;
   let abiItem = abi[0];
   if (functionName) {
-    const item = getAbiItem({ abi, name: functionName });
+    const item = xt.getAbiItem({ abi, name: functionName });
     if (!item)
-      throw new AbiFunctionNotFoundError(functionName, { docsPath });
+      throw new xt.AbiFunctionNotFoundError(functionName, { docsPath });
     abiItem = item;
   }
   if (abiItem.type !== "function")
-    throw new AbiFunctionNotFoundError(void 0, { docsPath });
+    throw new xt.AbiFunctionNotFoundError(void 0, { docsPath });
   if (!abiItem.outputs)
-    throw new AbiFunctionOutputsNotFoundError(abiItem.name, { docsPath });
+    throw new xt.AbiFunctionOutputsNotFoundError(abiItem.name, { docsPath });
   const values = (() => {
     if (abiItem.outputs.length === 0)
       return [];
@@ -55,11 +57,11 @@ function encodeFunctionResult(parameters) {
       return [result];
     if (Array.isArray(result))
       return result;
-    throw new InvalidArrayError(result);
+    throw new xt.InvalidArrayError(result);
   })();
-  return encodeAbiParameters(abiItem.outputs, values);
+  return xt.encodeAbiParameters(abiItem.outputs, values);
 }
-class OffchainLookupError extends BaseError {
+class OffchainLookupError extends xt.BaseError {
   constructor({ callbackSelector, cause, data, extraData, sender, urls }) {
     super(cause.shortMessage || "An error occurred while fetching for an offchain result.", {
       cause,
@@ -69,7 +71,7 @@ class OffchainLookupError extends BaseError {
         "Offchain Gateway Call:",
         urls && [
           "  Gateway URL(s):",
-          ...urls.map((url) => `    ${getUrl(url)}`)
+          ...urls.map((url) => `    ${xt.getUrl(url)}`)
         ],
         `  Sender: ${sender}`,
         `  Data: ${data}`,
@@ -80,18 +82,18 @@ class OffchainLookupError extends BaseError {
     });
   }
 }
-class OffchainLookupResponseMalformedError extends BaseError {
+class OffchainLookupResponseMalformedError extends xt.BaseError {
   constructor({ result, url }) {
     super("Offchain gateway response is malformed. Response data must be a hex value.", {
       metaMessages: [
-        `Gateway URL: ${getUrl(url)}`,
-        `Response: ${stringify(result)}`
+        `Gateway URL: ${xt.getUrl(url)}`,
+        `Response: ${xt.stringify(result)}`
       ],
       name: "OffchainLookupResponseMalformedError"
     });
   }
 }
-class OffchainLookupSenderMismatchError extends BaseError {
+class OffchainLookupSenderMismatchError extends xt.BaseError {
   constructor({ sender, to }) {
     super("Reverted sender address does not match target contract address (`to`).", {
       metaMessages: [
@@ -105,7 +107,7 @@ class OffchainLookupSenderMismatchError extends BaseError {
 const localBatchGatewayUrl = "x-batch-gateway:true";
 async function localBatchGatewayRequest(parameters) {
   const { data, ccipRequest: ccipRequest2 } = parameters;
-  const { args: [queries] } = decodeFunctionData({ abi: batchGatewayAbi, data });
+  const { args: [queries] } = decodeFunctionData({ abi: xt.batchGatewayAbi, data });
   const failures = [];
   const responses = [];
   await Promise.all(queries.map(async (query, i) => {
@@ -118,7 +120,7 @@ async function localBatchGatewayRequest(parameters) {
     }
   }));
   return encodeFunctionResult({
-    abi: batchGatewayAbi,
+    abi: xt.batchGatewayAbi,
     functionName: "query",
     result: [failures, responses]
   });
@@ -126,12 +128,12 @@ async function localBatchGatewayRequest(parameters) {
 function encodeError(error) {
   if (error.name === "HttpRequestError" && error.status)
     return encodeErrorResult({
-      abi: batchGatewayAbi,
+      abi: xt.batchGatewayAbi,
       errorName: "HttpError",
       args: [error.status, error.shortMessage]
     });
   return encodeErrorResult({
-    abi: [solidityError],
+    abi: [xt.solidityError],
     errorName: "Error",
     args: ["shortMessage" in error ? error.shortMessage : error.message]
   });
@@ -164,7 +166,7 @@ const offchainLookupAbiItem = {
   ]
 };
 async function offchainLookup(client, { blockNumber, blockTag, data, to }) {
-  const { args } = decodeErrorResult({
+  const { args } = xt.decodeErrorResult({
     data,
     abi: [offchainLookupAbiItem]
   });
@@ -172,18 +174,18 @@ async function offchainLookup(client, { blockNumber, blockTag, data, to }) {
   const { ccipRead } = client;
   const ccipRequest_ = ccipRead && typeof ccipRead?.request === "function" ? ccipRead.request : ccipRequest;
   try {
-    if (!isAddressEqual(to, sender))
+    if (!xt.isAddressEqual(to, sender))
       throw new OffchainLookupSenderMismatchError({ sender, to });
     const result = urls.includes(localBatchGatewayUrl) ? await localBatchGatewayRequest({
       data: callData,
       ccipRequest: ccipRequest_
     }) : await ccipRequest_({ data: callData, sender, urls });
-    const { data: data_ } = await call(client, {
+    const { data: data_ } = await xt.call(client, {
       blockNumber,
       blockTag,
-      data: concat([
+      data: xt.concat([
         callbackSelector,
-        encodeAbiParameters([{ type: "bytes" }, { type: "bytes" }], [result, extraData])
+        xt.encodeAbiParameters([{ type: "bytes" }, { type: "bytes" }], [result, extraData])
       ]),
       to
     });
@@ -219,16 +221,16 @@ async function ccipRequest({ data, sender, urls }) {
         result = await response.text();
       }
       if (!response.ok) {
-        error = new HttpRequestError({
+        error = new xt.HttpRequestError({
           body,
-          details: result?.error ? stringify(result.error) : response.statusText,
+          details: result?.error ? xt.stringify(result.error) : response.statusText,
           headers: response.headers,
           status: response.status,
           url
         });
         continue;
       }
-      if (!isHex(result)) {
+      if (!xt.isHex(result)) {
         error = new OffchainLookupResponseMalformedError({
           result,
           url
@@ -237,7 +239,7 @@ async function ccipRequest({ data, sender, urls }) {
       }
       return result;
     } catch (err) {
-      error = new HttpRequestError({
+      error = new xt.HttpRequestError({
         body,
         details: err.message,
         url
@@ -246,9 +248,7 @@ async function ccipRequest({ data, sender, urls }) {
   }
   throw error;
 }
-export {
-  ccipRequest,
-  offchainLookup,
-  offchainLookupAbiItem,
-  offchainLookupSignature
-};
+exports.ccipRequest = ccipRequest;
+exports.offchainLookup = offchainLookup;
+exports.offchainLookupAbiItem = offchainLookupAbiItem;
+exports.offchainLookupSignature = offchainLookupSignature;
