@@ -40,6 +40,21 @@ yarn add @ssv-labs/ethera-sdk
 pnpm add @ssv-labs/ethera-sdk
 ```
 
+For direct GitHub installs, the package now builds during installation via the package `prepare` script, so `dist/` does not need to be committed:
+
+```bash
+pnpm add github:ethera-labs/compose-sdk
+```
+
+This changes the install requirements for Git-based usage:
+
+- The consumer must install with a Node.js version that satisfies this repo's engine requirement (`>=22`).
+- The package manager must be able to install the repository's `devDependencies`, because `vite` and the TypeScript declaration tooling are needed during `prepare`.
+- Installation will take longer than consuming a prebuilt package from a registry, because the build runs on the consumer machine.
+- Build failures in the consumer environment will now fail the install itself instead of being caught earlier in CI.
+
+This only affects direct installs from the GitHub repository. Registry consumers still receive the published package artifacts and do not build the SDK during installation.
+
 ### Peer Dependencies
 
 The SDK requires the following peer dependencies:
