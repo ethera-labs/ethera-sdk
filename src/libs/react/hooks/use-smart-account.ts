@@ -1,6 +1,7 @@
 import { useAccount, useWalletClient } from 'wagmi';
 
-import { useComposeConfig } from '@/libs/react/compose-provider';
+import { EtheraError, isEtheraError } from '@/errors';
+import { useEtheraConfig } from '@/libs/react/ethera-provider';
 import { createSmartAccount } from '@/utils/smart-account/create';
 import { useQuery } from '@tanstack/react-query';
 
@@ -10,17 +11,21 @@ type Props = {
 };
 export const useSmartAccount = ({ chainId, multiChainIds = [] }: Props) => {
   const account = useAccount();
-  const composeConfig = useComposeConfig();
-
+  const etheraConfig = useEtheraConfig();
   const walletClient = useWalletClient();
-
-  if (!composeConfig.accountAbstractionContracts?.[chainId]) {
-    console.error(`Account abstraction contracts not found for chain ${chainId}`);
-  }
 
   return useQuery({
     queryKey: ['smart-account', walletClient.data?.account.address, chainId, multiChainIds],
-    queryFn: async () => createSmartAccount({ signer: walletClient.data!, chainId, multiChainIds }, composeConfig),
-    enabled: account.isConnected && !!walletClient.data && !!composeConfig.accountAbstractionContracts?.[chainId]
+    queryFn: async () => {
+      if (!walletClient.data) {
+        throw new EtheraError('WALLET_CLIENT_NOT_AVAILABLE', `Wallet client not available for chain ${chainId}.`, {
+          details: { chainId }
+        });
+      }
+
+      return createSmartAccount({ signer: walletClient.data, chainId, multiChainIds }, etheraConfig);
+    },
+    enabled: account.isConnected && !!walletClient.data,
+    retry: (failureCount, error) => !isEtheraError(error) && failureCount < 3
   });
 };

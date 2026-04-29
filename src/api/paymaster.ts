@@ -1,5 +1,5 @@
 import { api } from '@/api/api-client';
-import type { ComposeConfigReturnType } from '@/config';
+import type { EtheraConfigReturnType } from '@/types';
 import { stringifyBigints } from '@/utils/bigint';
 import type { Hex } from 'viem';
 import { numberToHex } from 'viem';
@@ -23,7 +23,7 @@ interface PaymasterResponseData {
 export type GetPaymasterDataForChainParams = {
   params: GetPaymasterDataParameters;
   method: 'pm_getPaymasterStubData' | 'pm_getPaymasterData' | 'pm_sponsorUserOperation';
-  getPaymasterEndpoint: NonNullable<ComposeConfigReturnType['getPaymasterEndpoint']>;
+  getPaymasterEndpoint: NonNullable<EtheraConfigReturnType['getPaymasterEndpoint']>;
 };
 
 const hexify = (n: number | bigint | undefined) => (n ? numberToHex(n) : undefined);
