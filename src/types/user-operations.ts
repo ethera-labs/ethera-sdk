@@ -47,6 +47,7 @@ type ChainAwareAccount = {
 };
 
 export type CreateUserOpCapableAccount = ChainAwareAccount & {
+  address?: Address;
   createUserOp: (calls: UserOpCall[]) => Promise<SmartAccountUserOp>;
 };
 
