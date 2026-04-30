@@ -46,9 +46,33 @@ describe('createEtheraConfig initialization', () => {
     );
     expect(config.getPublicClient(rollupA.id)).toBeDefined();
     expect(config.getPublicClient(rollupB.id)).toBeDefined();
+    expect(config.getEntryPoint(rollupA.id)).toBe(config.entryPoint);
+    expect(config.getEntryPoint(rollupB.id)).toBe(config.entryPoint);
     expect(config.accountAbstractionContracts).toBeDefined();
     expect(config.accountAbstractionContracts?.[rollupA.id]).toEqual(rollupsAccountAbstractionContracts);
     expect(config.accountAbstractionContracts?.[rollupB.id]).toEqual(rollupsAccountAbstractionContracts);
+  });
+
+  it('supports global and per-chain entry point configuration', () => {
+    const globalEntryPoint = { address: '0xglobal' } as never;
+    const rollupBEntryPoint = { address: '0xrollupB' } as never;
+
+    const config = createEtheraConfig({
+      wagmi: wagmiConfig,
+      entryPoint: globalEntryPoint,
+      entryPoints: {
+        [rollupB.id]: rollupBEntryPoint
+      },
+      accountAbstractionContracts: {
+        [rollupA.id]: rollupsAccountAbstractionContracts,
+        [rollupB.id]: rollupsAccountAbstractionContracts
+      }
+    });
+
+    expect(config.entryPoint).toBe(globalEntryPoint);
+    expect(config.entryPoints?.[rollupB.id]).toBe(rollupBEntryPoint);
+    expect(config.getEntryPoint(rollupA.id)).toBe(globalEntryPoint);
+    expect(config.getEntryPoint(rollupB.id)).toBe(rollupBEntryPoint);
   });
 
   it('fails fast when contracts are missing for a configured chain', () => {

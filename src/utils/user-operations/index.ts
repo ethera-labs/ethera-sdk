@@ -39,6 +39,14 @@ const assertCallsNotEmpty = (calls: UserOpCall[], method: string, operationIndex
   }
 };
 
+const normalizeCalls = (calls: UserOpCall[]): UserOpCall[] =>
+  calls.map((call) => ({
+    ...call,
+    value: call.value ?? 0n
+  }));
+
+const accountAddressDetails = (accountAddress: string | undefined) => (accountAddress ? { accountAddress } : {});
+
 const toExplorerUrl = (hash: Hex, publicClient: EtheraPublicClient) => {
   const explorerUrl = publicClient.chain?.blockExplorers?.default?.url;
 
@@ -53,10 +61,12 @@ const toExplorerUrl = (hash: Hex, publicClient: EtheraPublicClient) => {
   }
 };
 
-const validateUserOpComposition = (operations: UserOpsParams) => {
+const validateAndNormalizeUserOpComposition = (operations: UserOpsParams): UserOpsParams => {
   assertOperationsNotEmpty(operations, 'composeUserOps');
 
-  operations.forEach((operation, operationIndex) => {
+  const operationsByChain = new Map<number, Array<{ operationIndex: number; accountAddress?: string }>>();
+
+  return operations.map((operation, operationIndex) => {
     const { smartAccount, calls } = operation;
 
     assertCallsNotEmpty(calls, 'composeUserOps', operationIndex);
@@ -66,24 +76,32 @@ const validateUserOpComposition = (operations: UserOpsParams) => {
       typeof smartAccount.account.createUserOp !== 'function' ||
       !smartAccount.publicClient
     ) {
+      const accountAddress = smartAccount?.account?.address;
+
       throw new EtheraError(
         'SMART_ACCOUNT_INVALID',
         'composeUserOps requires smartAccount objects returned by createSmartAccount or useSmartAccount.',
         {
-          details: { method: 'composeUserOps', operationIndex }
+          details: { method: 'composeUserOps', operationIndex, ...accountAddressDetails(accountAddress) }
         }
       );
     }
 
     const accountChainId = smartAccount.account.client?.chain?.id;
     const publicClientChainId = smartAccount.publicClient.chain?.id;
+    const accountAddress = smartAccount.account.address;
 
     if (!accountChainId || !publicClientChainId) {
       throw new EtheraError(
         'SMART_ACCOUNT_INVALID',
         'composeUserOps requires smart accounts with chain-aware account and public client instances.',
         {
-          details: { method: 'composeUserOps', operationIndex, chainId: publicClientChainId ?? accountChainId }
+          details: {
+            method: 'composeUserOps',
+            operationIndex,
+            chainId: publicClientChainId ?? accountChainId,
+            ...accountAddressDetails(accountAddress)
+          }
         }
       );
     }
@@ -97,12 +115,62 @@ const validateUserOpComposition = (operations: UserOpsParams) => {
             method: 'composeUserOps',
             operationIndex,
             chainId: publicClientChainId,
+            ...accountAddressDetails(accountAddress),
             expected: String(publicClientChainId),
             received: String(accountChainId)
           }
         }
       );
     }
+
+    const chainOperations = operationsByChain.get(publicClientChainId) ?? [];
+    const duplicate = accountAddress
+      ? chainOperations.find((entry) => entry.accountAddress?.toLowerCase() === accountAddress.toLowerCase())
+      : undefined;
+
+    if (duplicate) {
+      throw new EtheraError(
+        'COMPOSE_OPERATION_DUPLICATE',
+        `composeUserOps received duplicate operations for chain ${publicClientChainId} and account ${accountAddress}.`,
+        {
+          details: {
+            method: 'composeUserOps',
+            operationIndex,
+            duplicateOperationIndex: duplicate.operationIndex,
+            chainId: publicClientChainId,
+            accountAddress
+          }
+        }
+      );
+    }
+
+    const ambiguous = chainOperations.find((entry) => !entry.accountAddress || !accountAddress);
+
+    if (ambiguous) {
+      throw new EtheraError(
+        'COMPOSE_OPERATION_AMBIGUOUS',
+        `composeUserOps received ambiguous operations for chain ${publicClientChainId}.`,
+        {
+          details: {
+            method: 'composeUserOps',
+            operationIndex,
+            duplicateOperationIndex: ambiguous.operationIndex,
+            chainId: publicClientChainId,
+            ...accountAddressDetails(accountAddress)
+          }
+        }
+      );
+    }
+
+    operationsByChain.set(publicClientChainId, [
+      ...chainOperations,
+      { operationIndex, accountAddress }
+    ]);
+
+    return {
+      ...operation,
+      calls: normalizeCalls(calls)
+    };
   });
 };
 
@@ -112,6 +180,7 @@ export const createUserOps = async (
   calls: UserOpCall[]
 ) => {
   assertCallsNotEmpty(calls, 'createUserOps');
+  const normalizedCalls = normalizeCalls(calls);
 
   const chainId = account.client.chain!.id;
   const publicClient = config.getPublicClient(chainId);
@@ -123,7 +192,7 @@ export const createUserOps = async (
 
   // Estimate gas for each call
   const callGasEstimates = await Promise.all(
-    calls.map((call) =>
+    normalizedCalls.map((call) =>
       publicClient
         .estimateGas({
           account,
@@ -173,7 +242,7 @@ export const createUserOps = async (
       }
     : undefined;
 
-  const callData = await account.encodeCalls(calls);
+  const callData = await account.encodeCalls(normalizedCalls);
 
   return {
     account,
@@ -189,10 +258,10 @@ export const createUserOps = async (
 };
 
 export const composeUserOps = async (operations: UserOpsParams, options: UserOpsOptions = {}) => {
-  validateUserOpComposition(operations);
+  const normalizedOperations = validateAndNormalizeUserOpComposition(operations);
 
   const unpreparedOperations = await Promise.all(
-    operations.map(({ smartAccount, calls }) => smartAccount.account.createUserOp(calls))
+    normalizedOperations.map(({ smartAccount, calls }) => smartAccount.account.createUserOp(calls))
   );
 
   return composeUnpreparedUserOps(unpreparedOperations, options);
