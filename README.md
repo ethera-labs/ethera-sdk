@@ -222,7 +222,7 @@ function SmartAccountDisplay() {
 
 ```tsx
 import { useSmartAccount } from '@ssv-labs/ethera-sdk/react';
-import { composeUserOps, createAbiEncoder } from '@ssv-labs/ethera-sdk';
+import { composeUserOps, createAbiEncoder, isEtheraError, validateComposePlan } from '@ssv-labs/ethera-sdk';
 import { erc20Abi } from 'viem';
 import { rollupA, rollupB } from '@ssv-labs/ethera-sdk';
 import { useMutation } from '@tanstack/react-query';
@@ -246,18 +246,21 @@ function TokenApproval() {
       // Create ABI encoder for ERC20
       const erc20 = createAbiEncoder(erc20Abi);
 
-      // Create and compose user operations in one step
-      const composed = await composeUserOps([
+      const plan = [
         {
           smartAccount: smartAccountA,
           calls: [
             {
               to: '0x...', // Token address on chain A
-              value: 0n,
               data: erc20.approve({
                 spender: '0x...',
                 amount: 10000000000000000000n
               })
+            },
+            {
+              to: '0x...', // Bridge or vault contract on chain A
+              value: 0n,
+              data: '0x...'
             }
           ]
         },
@@ -274,7 +277,18 @@ function TokenApproval() {
             }
           ]
         }
-      ]);
+      ] as const;
+
+      validateComposePlan(plan);
+
+      const composed = await composeUserOps(plan, {
+        onBuild: ({ operationIndex, chainId, hash }) => {
+          console.log('Built', operationIndex, chainId, hash);
+        },
+        onSubmit: ({ sessionId, hashes }) => {
+          console.log('Submitted', sessionId, hashes);
+        }
+      });
 
       // Send the composed transactions
       const result = await composed.send();
@@ -286,11 +300,13 @@ function TokenApproval() {
       const receipts = await result.wait();
       console.log('Transaction receipts:', receipts);
 
-      return {
-        hashes: result.hashes,
-        explorerUrls: composed.explorerUrls,
-        receipts
-      };
+      return { sessionId: composed.sessionId, hashes: result.hashes, explorerUrls: composed.explorerUrls, receipts };
+    } catch (error) {
+      if (isEtheraError(error)) {
+        console.error(error.code, error.details);
+      }
+
+      throw error;
     }
   });
 
@@ -729,6 +745,10 @@ const composed = await composeUserOps([
     calls: [
       {
         to: '0x...',
+        data: '0x...'
+      },
+      {
+        to: '0x...',
         value: 0n,
         data: '0x...'
       }
@@ -750,15 +770,21 @@ const result = await composed.send();
 const receipts = await result.wait();
 ```
 
+`composeUserOps` is the recommended default entrypoint. Use it when you have smart accounts and want the SDK to handle user-op creation, signing, XT payload encoding, and submission in one path.
+
 **Parameters:**
 
 - `operations`: Array of operations to compose. Each operation contains:
   - `smartAccount`: Object returned by `createSmartAccount` or `useSmartAccount`
-  - `calls`: Array of calls for that chain
+  - `calls`: Array of calls for that chain. `value` is optional and defaults to `0n`.
 - `options?`: Optional callbacks:
+  - `onBuild?`: Called per built transaction with normalized operation metadata and build output
+  - `onSign?`: Called per signed user operation with normalized operation metadata
   - `onSigned?`: Called when operations are signed
   - `onComposed?`: Called when transactions are built
   - `onPayloadEncoded?`: Called when the XT payload is encoded
+  - `onSubmit?`: Called after `eth_sendXTransaction` accepts the payload
+  - `onReceipt?`: Called per transaction receipt after `wait()`
 
 **Validation:**
 
@@ -766,8 +792,66 @@ const receipts = await result.wait();
 - Rejects operations without calls with `CALLS_EMPTY`
 - Rejects non-compatible smart account objects with `SMART_ACCOUNT_INVALID`
 - Rejects chain mismatches between account and public client with `CHAIN_ID_MISMATCH`
+- Rejects duplicate same-chain same-account plans with `COMPOSE_OPERATION_DUPLICATE`
+- Rejects ambiguous same-chain plans without distinct account addresses with `COMPOSE_OPERATION_AMBIGUOUS`
 
-**Returns:** Same return shape as `composeUnpreparedUserOps`
+**Returns:** Same base return shape as `composeUnpreparedUserOps`, plus:
+
+- `sessionId`: Stable identifier for this compose session
+- `operations`: Normalized per-operation metadata with `operationIndex`, `chainId`, `hash`, `explorerUrl`, and `operationId`
+
+**Structured error handling:**
+
+```typescript
+import { composeUserOps, isEtheraError } from '@ssv-labs/ethera-sdk';
+
+try {
+  const composed = await composeUserOps(plan);
+  await (await composed.send()).wait();
+} catch (error) {
+  if (isEtheraError(error)) {
+    console.error(error.code, error.details);
+  }
+
+  throw error;
+}
+```
+
+**Callback example:**
+
+```typescript
+const composed = await composeUserOps(plan, {
+  onSign: ({ operationIndex, chainId }) => {
+    console.log('Signed', operationIndex, chainId);
+  },
+  onBuild: ({ operationIndex, hash }) => {
+    console.log('Built', operationIndex, hash);
+  },
+  onSubmit: ({ sessionId, hashes }) => {
+    console.log('Submitted', sessionId, hashes);
+  },
+  onReceipt: ({ operationIndex, receipt }) => {
+    console.log('Receipt', operationIndex, receipt.status);
+  }
+});
+```
+
+#### `validateComposePlan`
+
+Pure local preflight for the default `composeUserOps` path.
+
+```typescript
+import { validateComposePlan } from '@ssv-labs/ethera-sdk';
+
+const preflight = validateComposePlan(plan, {
+  config: etheraConfig
+});
+
+console.log(preflight.sessionId);
+console.log(preflight.operations);
+```
+
+It validates account readiness, chain readiness, duplicate/ambiguous plans, and paymaster endpoint readiness without estimating gas, signing, or sending network requests. A `simulateCompose` helper is intentionally not exposed yet because stateful sponsorship and execution simulation would introduce different RPC-side behavior than the actual compose flow.
 
 #### `composeUnpreparedUserOps`
 
@@ -804,17 +888,25 @@ const receipts = await result.wait();
   - `chainId`: Chain ID
   - `signer`: Signer instance
 - `options?`: Optional callbacks:
+  - `onBuild?`: Called per built transaction
+  - `onSign?`: Called per signed user operation
   - `onSigned?`: Called when operations are signed
   - `onComposed?`: Called when transactions are built
   - `onPayloadEncoded?`: Called when payload is encoded
+  - `onSubmit?`: Called after submission
+  - `onReceipt?`: Called per receipt
 
 **Returns:** Object with:
 
+- `sessionId`: Stable identifier for this compose session
 - `payload`: Encoded XT message
 - `builds`: Array of transaction builds
 - `explorerUrls`: Array of explorer URLs for each transaction
+- `operations`: Normalized per-operation metadata
 - `send()`: Function that sends the transactions and returns:
+  - `sessionId`: Stable identifier for this compose session
   - `hashes`: Array of transaction hashes
+  - `operations`: Normalized per-operation metadata
   - `wait()`: Function that waits for all transaction receipts
 
 ## Configuration Details

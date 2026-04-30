@@ -1,6 +1,11 @@
+import { getValidatedPaymasterEndpoint, getPaymasterDataForChain } from '@/api/paymaster';
 import { EtheraError } from '@/errors';
-import { getPaymasterDataForChain } from '@/api/paymaster';
+import { encodeXtMessage, toRpcUserOpCanonical } from '@/main';
 import type {
+  ComposeOperationIdentity,
+  ComposedSignedUserOpsTxReturnType,
+  ComposedOperationMetadata,
+  ComposedUserOpsResult,
   EtheraConfigReturnType,
   EtheraPublicClient,
   PreparedUserOps,
@@ -8,18 +13,32 @@ import type {
   UnpreparedUserOps,
   UserOpCall,
   UserOpsOptions,
-  UserOpsParams
+  UserOpsParams,
+  ValidateComposePlanOptions,
+  ValidateComposePlanResult
 } from '@/types';
-import { encodeXtMessage, toRpcUserOpCanonical } from '@/main';
 import { prepareAndSignUserOperations, signUserOperations } from '@zerodev/multi-chain-ecdsa-validator';
 import type { CreateKernelAccountReturnType } from '@zerodev/sdk';
 import type { Chain, Client, Transport } from 'viem';
-import { type Hex } from 'viem';
+import { type Address, type Hex } from 'viem';
 import type { GetPaymasterDataParameters, PaymasterActions, SmartAccount } from 'viem/account-abstraction';
 
 const FALLBACK_CALL_GAS_LIMIT = 900_000n;
 const MIN_VERIFICATION_GAS_LIMIT = 1_200_000n;
 const PRE_VERIFICATION_GAS = 90_000n;
+
+type NormalizedUserOpsOperation = UserOpsParams[number] & {
+  operationIndex: number;
+  chainId: number;
+  accountAddress?: Address;
+  calls: UserOpCall[];
+};
+
+type OperationDescriptor = {
+  operationIndex: number;
+  chainId: number;
+  accountAddress?: Address;
+};
 
 const withMargin = (value: bigint, marginPct = 25n) => value + (value * marginPct) / 100n;
 
@@ -61,15 +80,64 @@ const toExplorerUrl = (hash: Hex, publicClient: EtheraPublicClient) => {
   }
 };
 
-const validateAndNormalizeUserOpComposition = (operations: UserOpsParams): UserOpsParams => {
-  assertOperationsNotEmpty(operations, 'composeUserOps');
+const createFallbackSessionId = (operations: OperationDescriptor[]) =>
+  `compose-${operations
+    .map(({ operationIndex, chainId, accountAddress }) => `${operationIndex}-${chainId}-${accountAddress ?? 'unknown'}`)
+    .join('_')}`;
+
+const createComposeSessionId = (operations: OperationDescriptor[]) => {
+  const randomUuid = globalThis.crypto?.randomUUID?.();
+
+  return randomUuid ? `compose-${randomUuid}` : createFallbackSessionId(operations);
+};
+
+const withComposeSession = (operations: OperationDescriptor[], sessionId = createComposeSessionId(operations)) =>
+  operations.map<ComposeOperationIdentity>((operation) => ({
+    ...operation,
+    sessionId,
+    operationId: `${sessionId}:${operation.operationIndex}:${operation.chainId}`
+  }));
+
+const describeNormalizedOperations = (operations: NormalizedUserOpsOperation[]): OperationDescriptor[] =>
+  operations.map(({ operationIndex, chainId, accountAddress }) => ({
+    operationIndex,
+    chainId,
+    accountAddress
+  }));
+
+const describeUnpreparedOperations = (operations: UnpreparedUserOps): OperationDescriptor[] =>
+  operations.map((operation, operationIndex) => ({
+    operationIndex,
+    chainId: operation.publicClient.chain!.id,
+    accountAddress: operation.account.address
+  }));
+
+const describePreparedOperations = (operations: PreparedUserOps): OperationDescriptor[] =>
+  operations.map((operation, operationIndex) => ({
+    operationIndex,
+    chainId: operation.publicClient.chain!.id,
+    accountAddress: operation.account.address
+  }));
+
+const describeSignedOperations = (operations: SignedUserOps): OperationDescriptor[] =>
+  operations.map((operation, operationIndex) => ({
+    operationIndex,
+    chainId: operation.publicClient.chain!.id,
+    accountAddress: operation.signedCanonicalOps.sender
+  }));
+
+const validateAndNormalizeUserOpComposition = (
+  operations: UserOpsParams,
+  method: 'composeUserOps' | 'validateComposePlan'
+): NormalizedUserOpsOperation[] => {
+  assertOperationsNotEmpty(operations, method);
 
   const operationsByChain = new Map<number, Array<{ operationIndex: number; accountAddress?: string }>>();
 
   return operations.map((operation, operationIndex) => {
     const { smartAccount, calls } = operation;
 
-    assertCallsNotEmpty(calls, 'composeUserOps', operationIndex);
+    assertCallsNotEmpty(calls, method, operationIndex);
 
     if (
       !smartAccount?.account ||
@@ -80,9 +148,9 @@ const validateAndNormalizeUserOpComposition = (operations: UserOpsParams): UserO
 
       throw new EtheraError(
         'SMART_ACCOUNT_INVALID',
-        'composeUserOps requires smartAccount objects returned by createSmartAccount or useSmartAccount.',
+        `${method} requires smartAccount objects returned by createSmartAccount or useSmartAccount.`,
         {
-          details: { method: 'composeUserOps', operationIndex, ...accountAddressDetails(accountAddress) }
+          details: { method, operationIndex, ...accountAddressDetails(accountAddress) }
         }
       );
     }
@@ -94,10 +162,10 @@ const validateAndNormalizeUserOpComposition = (operations: UserOpsParams): UserO
     if (!accountChainId || !publicClientChainId) {
       throw new EtheraError(
         'SMART_ACCOUNT_INVALID',
-        'composeUserOps requires smart accounts with chain-aware account and public client instances.',
+        `${method} requires smart accounts with chain-aware account and public client instances.`,
         {
           details: {
-            method: 'composeUserOps',
+            method,
             operationIndex,
             chainId: publicClientChainId ?? accountChainId,
             ...accountAddressDetails(accountAddress)
@@ -107,20 +175,16 @@ const validateAndNormalizeUserOpComposition = (operations: UserOpsParams): UserO
     }
 
     if (accountChainId !== publicClientChainId) {
-      throw new EtheraError(
-        'CHAIN_ID_MISMATCH',
-        `composeUserOps received mismatched chain IDs for operation ${operationIndex}.`,
-        {
-          details: {
-            method: 'composeUserOps',
-            operationIndex,
-            chainId: publicClientChainId,
-            ...accountAddressDetails(accountAddress),
-            expected: String(publicClientChainId),
-            received: String(accountChainId)
-          }
+      throw new EtheraError('CHAIN_ID_MISMATCH', `${method} received mismatched chain IDs for operation ${operationIndex}.`, {
+        details: {
+          method,
+          operationIndex,
+          chainId: publicClientChainId,
+          ...accountAddressDetails(accountAddress),
+          expected: String(publicClientChainId),
+          received: String(accountChainId)
         }
-      );
+      });
     }
 
     const chainOperations = operationsByChain.get(publicClientChainId) ?? [];
@@ -131,10 +195,10 @@ const validateAndNormalizeUserOpComposition = (operations: UserOpsParams): UserO
     if (duplicate) {
       throw new EtheraError(
         'COMPOSE_OPERATION_DUPLICATE',
-        `composeUserOps received duplicate operations for chain ${publicClientChainId} and account ${accountAddress}.`,
+        `${method} received duplicate operations for chain ${publicClientChainId} and account ${accountAddress}.`,
         {
           details: {
-            method: 'composeUserOps',
+            method,
             operationIndex,
             duplicateOperationIndex: duplicate.operationIndex,
             chainId: publicClientChainId,
@@ -147,31 +211,250 @@ const validateAndNormalizeUserOpComposition = (operations: UserOpsParams): UserO
     const ambiguous = chainOperations.find((entry) => !entry.accountAddress || !accountAddress);
 
     if (ambiguous) {
-      throw new EtheraError(
-        'COMPOSE_OPERATION_AMBIGUOUS',
-        `composeUserOps received ambiguous operations for chain ${publicClientChainId}.`,
-        {
-          details: {
-            method: 'composeUserOps',
-            operationIndex,
-            duplicateOperationIndex: ambiguous.operationIndex,
-            chainId: publicClientChainId,
-            ...accountAddressDetails(accountAddress)
-          }
+      throw new EtheraError('COMPOSE_OPERATION_AMBIGUOUS', `${method} received ambiguous operations for chain ${publicClientChainId}.`, {
+        details: {
+          method,
+          operationIndex,
+          duplicateOperationIndex: ambiguous.operationIndex,
+          chainId: publicClientChainId,
+          ...accountAddressDetails(accountAddress)
         }
-      );
+      });
     }
 
-    operationsByChain.set(publicClientChainId, [
-      ...chainOperations,
-      { operationIndex, accountAddress }
-    ]);
+    operationsByChain.set(publicClientChainId, [...chainOperations, { operationIndex, accountAddress }]);
 
     return {
       ...operation,
+      operationIndex,
+      chainId: publicClientChainId,
+      accountAddress,
       calls: normalizeCalls(calls)
     };
   });
+};
+
+const buildOperationMetadata = (
+  operations: SignedUserOps,
+  descriptors: ComposeOperationIdentity[],
+  builds: ComposedSignedUserOpsTxReturnType[]
+): ComposedOperationMetadata[] =>
+  builds.map((build, operationIndex) => ({
+    ...descriptors[operationIndex],
+    hash: build.hash,
+    explorerUrl: toExplorerUrl(build.hash, operations[operationIndex].publicClient)
+  }));
+
+const getPaymasterEndpointResolver = (options: ValidateComposePlanOptions) => {
+  if (!options.config?.hasPaymaster) {
+    return undefined;
+  }
+
+  if (!options.config.getPaymasterEndpoint) {
+    throw new EtheraError(
+      'PAYMASTER_ENDPOINT_INVALID',
+      'validateComposePlan requires getPaymasterEndpoint when paymaster support is enabled.',
+      {
+        details: { method: 'validateComposePlan' }
+      }
+    );
+  }
+
+  return options.config.getPaymasterEndpoint;
+};
+
+const composeSignedUserOpsInternal = async (
+  operations: SignedUserOps,
+  options: UserOpsOptions,
+  descriptors: ComposeOperationIdentity[]
+): Promise<ComposedUserOpsResult> => {
+  assertOperationsNotEmpty(operations, 'composeSignedUserOps');
+
+  const builds: ComposedSignedUserOpsTxReturnType[] = await Promise.all(
+    operations.map((operation) =>
+      operation.publicClient.request({
+        method: 'compose_buildSignedUserOpsTx',
+        params: [[operation.signedCanonicalOps], { chainId: operation.publicClient.chain!.id }]
+      })
+    )
+  );
+
+  const operationMetadata = buildOperationMetadata(operations, descriptors, builds);
+  const explorerUrls = operationMetadata.map((operation) => operation.explorerUrl);
+
+  operationMetadata.forEach((operation, operationIndex) => {
+    options.onBuild?.({
+      ...operation,
+      build: builds[operationIndex]
+    });
+  });
+
+  options.onComposed?.(builds, explorerUrls);
+
+  const payload = encodeXtMessage({
+    senderId: 'client',
+    entries: builds.map((build, operationIndex) => ({
+      chainId: operations[operationIndex].publicClient.chain!.id,
+      rawTx: build.raw as `0x${string}`
+    }))
+  });
+
+  options.onPayloadEncoded?.(payload);
+
+  return {
+    sessionId: descriptors[0].sessionId,
+    payload,
+    builds,
+    explorerUrls,
+    operations: operationMetadata,
+    send: async () => {
+      await operations[0].publicClient.request({
+        method: 'eth_sendXTransaction',
+        params: [payload]
+      });
+
+      const hashes = builds.map((build) => build.hash);
+
+      options.onSubmit?.({
+        sessionId: descriptors[0].sessionId,
+        payload,
+        hashes,
+        operations: operationMetadata
+      });
+
+      return {
+        sessionId: descriptors[0].sessionId,
+        hashes,
+        operations: operationMetadata,
+        wait: async () => {
+          const receipts = await Promise.all(
+            builds.map((build, operationIndex) =>
+              operations[operationIndex].publicClient.waitForTransactionReceipt({ hash: build.hash })
+            )
+          );
+
+          receipts.forEach((receipt, operationIndex) => {
+            options.onReceipt?.({
+              ...operationMetadata[operationIndex],
+              receipt
+            });
+          });
+
+          return receipts;
+        }
+      };
+    }
+  };
+};
+
+const composeUnpreparedUserOpsInternal = async (
+  operations: UnpreparedUserOps,
+  options: UserOpsOptions,
+  descriptors: ComposeOperationIdentity[]
+) => {
+  assertOperationsNotEmpty(operations, 'composeUnpreparedUserOps');
+
+  const signedCanonicalOps = (
+    await prepareAndSignUserOperations(
+      operations.map((operation) => operation.publicClient as Client<Transport, Chain, SmartAccount>),
+      operations.map((operation) => operation.userOp)
+    )
+  ).map(toRpcUserOpCanonical);
+
+  signedCanonicalOps.forEach((signedUserOp, operationIndex) => {
+    options.onSign?.({
+      ...descriptors[operationIndex],
+      signedUserOp
+    });
+  });
+
+  options.onSigned?.(signedCanonicalOps);
+
+  return composeSignedUserOpsInternal(
+    operations.map((operation, operationIndex) => ({
+      ...operation,
+      signedCanonicalOps: signedCanonicalOps[operationIndex]
+    })),
+    options,
+    descriptors
+  );
+};
+
+const composePreparedUserOpsInternal = async (
+  operations: PreparedUserOps,
+  options: UserOpsOptions,
+  descriptors: ComposeOperationIdentity[]
+) => {
+  assertOperationsNotEmpty(operations, 'composePreparedUserOps');
+
+  const unsignedUserOps = operations.map((operation) => operation.userOp);
+  const sourcePublicClient = operations[0].publicClient;
+  const sourceKernelAccount = operations[0].account;
+
+  const signedCanonicalOps = (
+    await signUserOperations(sourcePublicClient, {
+      userOperations: unsignedUserOps,
+      account: sourceKernelAccount
+    })
+  ).map(toRpcUserOpCanonical);
+
+  signedCanonicalOps.forEach((signedUserOp, operationIndex) => {
+    options.onSign?.({
+      ...descriptors[operationIndex],
+      signedUserOp
+    });
+  });
+
+  options.onSigned?.(signedCanonicalOps);
+
+  return composeSignedUserOpsInternal(
+    operations.map((operation, operationIndex) => ({
+      ...operation,
+      signedCanonicalOps: signedCanonicalOps[operationIndex]
+    })),
+    options,
+    descriptors
+  );
+};
+
+export const validateComposePlan = (
+  operations: UserOpsParams,
+  options: ValidateComposePlanOptions = {}
+): ValidateComposePlanResult => {
+  const normalizedOperations = validateAndNormalizeUserOpComposition(operations, 'validateComposePlan');
+  const descriptors = withComposeSession(describeNormalizedOperations(normalizedOperations));
+  const hasPaymaster = Boolean(options.config?.hasPaymaster);
+  const getPaymasterEndpoint = getPaymasterEndpointResolver(options);
+
+  return {
+    sessionId: descriptors[0].sessionId,
+    hasPaymaster,
+    operations: descriptors.map((descriptor, operationIndex) => {
+      const paymasterEndpoints = hasPaymaster
+        ? {
+            sponsorUserOperation: getValidatedPaymasterEndpoint({
+              method: 'pm_sponsorUserOperation',
+              chainId: descriptor.chainId,
+              getPaymasterEndpoint: getPaymasterEndpoint!
+            }),
+            getPaymasterStubData: getValidatedPaymasterEndpoint({
+              method: 'pm_getPaymasterStubData',
+              chainId: descriptor.chainId,
+              getPaymasterEndpoint: getPaymasterEndpoint!
+            })
+          }
+        : undefined;
+
+      return {
+        ...descriptor,
+        callCount: normalizedOperations[operationIndex].calls.length,
+        accountReady: true,
+        chainReady: true,
+        paymasterReady: !hasPaymaster || Boolean(paymasterEndpoints),
+        ...(paymasterEndpoints ? { paymasterEndpoints } : {})
+      };
+    })
+  };
 };
 
 export const createUserOps = async (
@@ -190,7 +473,6 @@ export const createUserOps = async (
     });
   }
 
-  // Estimate gas for each call
   const callGasEstimates = await Promise.all(
     normalizedCalls.map((call) =>
       publicClient
@@ -211,16 +493,12 @@ export const createUserOps = async (
     )
   );
 
-  // Sum all call gas limits
   const callGasLimit = callGasEstimates.reduce((acc, gas) => acc + gas, 0n);
-
-  // Calculate verification gas limit
   const verificationGasLimit =
     callGasLimit + PRE_VERIFICATION_GAS > MIN_VERIFICATION_GAS_LIMIT
       ? callGasLimit + PRE_VERIFICATION_GAS
       : MIN_VERIFICATION_GAS_LIMIT;
 
-  // Estimate fees per gas
   const gasEstimate = await publicClient.estimateFeesPerGas();
 
   const paymaster: PaymasterActions | undefined = config.hasPaymaster
@@ -258,97 +536,27 @@ export const createUserOps = async (
 };
 
 export const composeUserOps = async (operations: UserOpsParams, options: UserOpsOptions = {}) => {
-  const normalizedOperations = validateAndNormalizeUserOpComposition(operations);
+  const normalizedOperations = validateAndNormalizeUserOpComposition(operations, 'composeUserOps');
+  const descriptors = withComposeSession(describeNormalizedOperations(normalizedOperations));
 
   const unpreparedOperations = await Promise.all(
     normalizedOperations.map(({ smartAccount, calls }) => smartAccount.account.createUserOp(calls))
   );
 
-  return composeUnpreparedUserOps(unpreparedOperations, options);
+  return composeUnpreparedUserOpsInternal(unpreparedOperations, options, descriptors);
 };
 
 export const composeUnpreparedUserOps = async (operations: UnpreparedUserOps, options: UserOpsOptions = {}) => {
-  assertOperationsNotEmpty(operations, 'composeUnpreparedUserOps');
-
-  const signedCanonicalOps = (
-    await prepareAndSignUserOperations(
-      operations.map((operation) => operation.publicClient as Client<Transport, Chain, SmartAccount>),
-      operations.map((operation) => operation.userOp)
-    )
-  ).map(toRpcUserOpCanonical);
-
-  options.onSigned?.(signedCanonicalOps);
-
-  return composeSignedUserOps(
-    operations.map((op, i) => ({ ...op, signedCanonicalOps: signedCanonicalOps[i] })),
-    options
-  );
+  const descriptors = withComposeSession(describeUnpreparedOperations(operations));
+  return composeUnpreparedUserOpsInternal(operations, options, descriptors);
 };
 
 export const composePreparedUserOps = async (operations: PreparedUserOps, options: UserOpsOptions = {}) => {
-  assertOperationsNotEmpty(operations, 'composePreparedUserOps');
-
-  const unsignedUserOps = operations.map((op) => op.userOp);
-  const sourcePublicClient = operations[0].publicClient;
-  const sourceKernelAccount = operations[0].account;
-
-  const signedCanonicalOps = (
-    await signUserOperations(sourcePublicClient, {
-      userOperations: unsignedUserOps,
-      account: sourceKernelAccount // it uses it to get the Entrypoint address and version
-    })
-  ).map(toRpcUserOpCanonical);
-
-  options.onSigned?.(signedCanonicalOps);
-
-  return composeSignedUserOps(
-    operations.map((op, i) => ({ ...op, signedCanonicalOps: signedCanonicalOps[i] })),
-    options
-  );
+  const descriptors = withComposeSession(describePreparedOperations(operations));
+  return composePreparedUserOpsInternal(operations, options, descriptors);
 };
 
 export const composeSignedUserOps = async (operations: SignedUserOps, options: UserOpsOptions = {}) => {
-  assertOperationsNotEmpty(operations, 'composeSignedUserOps');
-
-  const builds = await Promise.all(
-    operations.map((operation) =>
-      operation.publicClient.request({
-        method: 'compose_buildSignedUserOpsTx',
-        params: [[operation.signedCanonicalOps], { chainId: operation.publicClient.chain!.id }]
-      })
-    )
-  );
-
-  const explorerUrls = builds.map((build, i) => toExplorerUrl(build.hash, operations[i].publicClient));
-
-  options.onComposed?.(builds, explorerUrls);
-
-  const payload = encodeXtMessage({
-    senderId: 'client',
-    entries: builds.map((build, i) => ({
-      chainId: operations[i].publicClient.chain!.id,
-      rawTx: build.raw as `0x${string}`
-    }))
-  });
-
-  options.onPayloadEncoded?.(payload);
-
-  return {
-    payload,
-    builds,
-    explorerUrls,
-    send: () =>
-      operations[0].publicClient
-        .request({
-          method: 'eth_sendXTransaction',
-          params: [payload]
-        })
-        .then(() => ({
-          hashes: builds.map((build) => build.hash),
-          wait: () =>
-            Promise.all(
-              builds.map((build, i) => operations[i].publicClient.waitForTransactionReceipt({ hash: build.hash }))
-            )
-        }))
-  };
+  const descriptors = withComposeSession(describeSignedOperations(operations));
+  return composeSignedUserOpsInternal(operations, options, descriptors);
 };
