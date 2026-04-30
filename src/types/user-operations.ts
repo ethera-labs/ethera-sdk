@@ -11,7 +11,7 @@ export type EtheraPublicClient = PublicClient<Transport, Chain, SmartAccount, Et
 
 export type UserOpCall = {
   to: Address;
-  value: bigint;
+  value?: bigint;
   data: Hex;
 };
 

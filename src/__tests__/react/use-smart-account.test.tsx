@@ -33,6 +33,7 @@ describe('useSmartAccount', () => {
 
     const config = {
       getPublicClient: vi.fn(),
+      getEntryPoint: vi.fn(),
       hasPaymaster: false,
       getPaymasterEndpoint: undefined,
       accountAbstractionContracts: {},

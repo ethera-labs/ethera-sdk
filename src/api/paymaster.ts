@@ -1,4 +1,5 @@
 import { api } from '@/api/api-client';
+import { EtheraError } from '@/errors';
 import type { EtheraConfigReturnType } from '@/types';
 import { stringifyBigints } from '@/utils/bigint';
 import type { Hex } from 'viem';
@@ -28,11 +29,39 @@ export type GetPaymasterDataForChainParams = {
 
 const hexify = (n: number | bigint | undefined) => (n ? numberToHex(n) : undefined);
 
+const getValidatedPaymasterEndpoint = ({
+  method,
+  chainId,
+  getPaymasterEndpoint
+}: Pick<GetPaymasterDataForChainParams, 'method' | 'getPaymasterEndpoint'> & { chainId: number }) => {
+  const endpoint = getPaymasterEndpoint({ method, chainId });
+
+  if (!endpoint) {
+    throw new EtheraError('PAYMASTER_ENDPOINT_INVALID', `Paymaster endpoint not found for chain ${chainId}.`, {
+      details: { method, chainId, value: endpoint }
+    });
+  }
+
+  try {
+    return new URL(endpoint).toString();
+  } catch {
+    throw new EtheraError('PAYMASTER_ENDPOINT_INVALID', `Invalid paymaster endpoint for chain ${chainId}.`, {
+      details: { method, chainId, value: endpoint }
+    });
+  }
+};
+
 export const getPaymasterDataForChain = async ({
   params,
   method,
   getPaymasterEndpoint
 }: GetPaymasterDataForChainParams) => {
+  const endpoint = getValidatedPaymasterEndpoint({
+    method,
+    chainId: params.chainId,
+    getPaymasterEndpoint
+  });
+
   const userOpOnly = {
     callData: params.callData,
     initCode: params.initCode,
@@ -57,7 +86,7 @@ export const getPaymasterDataForChain = async ({
 
   return api
     .post<PaymasterResponseData>(
-      getPaymasterEndpoint({ method, chainId: params.chainId })!,
+      endpoint,
       {
         jsonrpc: '2.0',
         id: 1,

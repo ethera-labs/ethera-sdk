@@ -13,6 +13,8 @@ import type { SmartAccount } from 'viem/account-abstraction';
 export function createEtheraConfig<TConfig extends Config>(
   props: EtheraConfigArgs<TConfig>
 ): EtheraConfigReturnType<TConfig> {
+  const entryPoint = props.entryPoint ?? entryPointV07;
+
   validateAccountAbstractionContracts(
     props.wagmi.chains.map((chain) => chain.id) as TConfig['chains'][number]['id'][],
     props.accountAbstractionContracts
@@ -34,7 +36,9 @@ export function createEtheraConfig<TConfig extends Config>(
       return publicClient;
     },
     accountAbstractionContracts: props.accountAbstractionContracts,
+    entryPoints: props.entryPoints,
+    getEntryPoint: (chainId) => props.entryPoints?.[chainId] ?? entryPoint,
     hasPaymaster: Boolean(props.getPaymasterEndpoint),
-    entryPoint: entryPointV07
+    entryPoint
   };
 }

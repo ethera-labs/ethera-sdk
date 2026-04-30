@@ -74,6 +74,7 @@ const createMockPublicClient = (chainId = 1, explorerUrl = 'https://explorer.tes
 
 const baseConfig: EtheraConfigReturnType = {
   getPublicClient: () => undefined as never,
+  getEntryPoint: () => ({} as never),
   hasPaymaster: false,
   getPaymasterEndpoint: undefined,
   accountAbstractionContracts: {},
@@ -345,6 +346,29 @@ describe('compose user operations', () => {
     expect(result.payload).toBe('0xencoded');
   });
 
+  it('defaults omitted composeUserOps call values to zero', async () => {
+    const { operations } = buildOperationsForComposition();
+    (prepareAndSignUserOperations as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([{ sig: 'a' }]);
+    const createUserOp = vi.fn().mockResolvedValue(operations[0]);
+
+    await composeUserOps([
+      {
+        smartAccount: {
+          account: {
+            client: { chain: { id: 1 } },
+            createUserOp
+          },
+          publicClient: createMockPublicClient(1)
+        },
+        calls: [{ to: '0x0000000000000000000000000000000000000011' as Address, data: '0x' as Hex }]
+      }
+    ]);
+
+    expect(createUserOp).toHaveBeenCalledWith([
+      { to: '0x0000000000000000000000000000000000000011', value: 0n, data: '0x' }
+    ]);
+  });
+
   it('signs prepared user operations with a shared account', async () => {
     const { publicClientA, publicClientB, operations } = buildOperationsForComposition();
     (signUserOperations as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([{ sig: 'a' }, { sig: 'b' }]);
@@ -570,6 +594,85 @@ describe('compose user operations', () => {
           chainId: 2,
           expected: '2',
           received: '1'
+        }
+      })
+    );
+  });
+
+  it('rejects duplicate composeUserOps operations for the same chain and account', async () => {
+    const accountAddress = '0x00000000000000000000000000000000000000a1' as Address;
+
+    await expect(
+      composeUserOps([
+        {
+          smartAccount: {
+            account: {
+              address: accountAddress,
+              client: { chain: { id: 1 } },
+              createUserOp: vi.fn()
+            },
+            publicClient: createMockPublicClient(1)
+          },
+          calls: [{ to: '0x0000000000000000000000000000000000000011' as Address, value: 0n, data: '0x' as Hex }]
+        },
+        {
+          smartAccount: {
+            account: {
+              address: accountAddress,
+              client: { chain: { id: 1 } },
+              createUserOp: vi.fn()
+            },
+            publicClient: createMockPublicClient(1)
+          },
+          calls: [{ to: '0x0000000000000000000000000000000000000022' as Address, value: 0n, data: '0x' as Hex }]
+        }
+      ])
+    ).rejects.toThrowError(
+      expect.objectContaining<Partial<EtheraError>>({
+        code: 'COMPOSE_OPERATION_DUPLICATE',
+        details: {
+          method: 'composeUserOps',
+          operationIndex: 1,
+          duplicateOperationIndex: 0,
+          chainId: 1,
+          accountAddress
+        }
+      })
+    );
+  });
+
+  it('rejects ambiguous same-chain composeUserOps operations without account addresses', async () => {
+    await expect(
+      composeUserOps([
+        {
+          smartAccount: {
+            account: {
+              client: { chain: { id: 1 } },
+              createUserOp: vi.fn()
+            },
+            publicClient: createMockPublicClient(1)
+          },
+          calls: [{ to: '0x0000000000000000000000000000000000000011' as Address, value: 0n, data: '0x' as Hex }]
+        },
+        {
+          smartAccount: {
+            account: {
+              client: { chain: { id: 1 } },
+              createUserOp: vi.fn()
+            },
+            publicClient: createMockPublicClient(1)
+          },
+          calls: [{ to: '0x0000000000000000000000000000000000000022' as Address, value: 0n, data: '0x' as Hex }]
+        }
+      ])
+    ).rejects.toThrowError(
+      expect.objectContaining<Partial<EtheraError>>({
+        code: 'COMPOSE_OPERATION_AMBIGUOUS',
+        details: {
+          method: 'composeUserOps',
+          operationIndex: 1,
+          duplicateOperationIndex: 0,
+          chainId: 1
         }
       })
     );
