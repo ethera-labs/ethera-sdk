@@ -104,7 +104,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "release-it": "17.11.0",
-    "rollup": "4.45.0",
+    "rollup": "4.59.0",
     "rollup-plugin-delete": "2.2.0",
     "rollup-plugin-dts": "6.2.1",
     "rollup-plugin-tsconfig-paths": "1.5.2",
@@ -131,9 +131,9 @@
     "@zerodev/multi-chain-ecdsa-validator": "5.4.5",
     "@zerodev/sdk": "5.5.3",
     "abitype": "^1.0.6",
-    "axios": "^1.12.2",
+    "axios": "^1.13.5",
     "lodash-es": "^4.17.21",
-    "protobufjs": "^7.5.4"
+    "protobufjs": "^7.5.5"
   },
   "license": "SEE LICENSE IN LICENSE FILE",
   "peerDependencies": {
