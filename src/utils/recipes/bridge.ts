@@ -1,8 +1,8 @@
 import { EtheraError } from '@/errors';
-import type { ComposableSmartAccount, UserOpCall, UserOpsOptions, UserOpsParams } from '@/types';
+import type { ComposableSmartAccount, EtheraPublicClient, UserOpCall, UserOpsOptions, UserOpsParams } from '@/types';
 import { createAbiEncoder } from '@/utils/abi';
 import { composeUserOps } from '@/utils/user-operations';
-import { type Address, erc20Abi } from 'viem';
+import { type Address, erc20Abi, type Hex, maxUint256 } from 'viem';
 
 const erc20 = createAbiEncoder(erc20Abi);
 
@@ -60,6 +60,35 @@ const wrappedNativeAbi = [
 const bridge = createAbiEncoder(bridgeAbi);
 const wrappedNative = createAbiEncoder(wrappedNativeAbi);
 
+export type AllowancePolicy =
+  | { strategy: 'exact' }
+  | { strategy: 'max' }
+  | { strategy: 'none' }
+  | { strategy: 'custom'; amount: bigint };
+
+export type BridgeSendParams = {
+  otherChainId: bigint;
+  token: Address;
+  sender: Address;
+  receiver: Address;
+  amount: bigint;
+  sessionId: bigint;
+  destBridge: Address;
+};
+
+export type BridgeReceiveParams = {
+  otherChainId: bigint;
+  sender: Address;
+  receiver: Address;
+  sessionId: bigint;
+  srcBridge: Address;
+};
+
+export type BridgeConfig = {
+  encodeSend?: (params: BridgeSendParams) => Hex;
+  encodeReceiveTokens?: (params: BridgeReceiveParams) => Hex;
+};
+
 type BridgeTransferBase = {
   sourceSmartAccount: ComposableSmartAccount;
   destinationSmartAccount: ComposableSmartAccount;
@@ -67,6 +96,7 @@ type BridgeTransferBase = {
   destinationBridge: Address;
   sessionId: bigint;
   recipient?: Address;
+  bridgeConfig?: BridgeConfig;
 };
 
 type Erc20BridgeTransfer = BridgeTransferBase & {
@@ -75,6 +105,7 @@ type Erc20BridgeTransfer = BridgeTransferBase & {
     token: Address;
     amount: bigint;
     sourceOwner?: Address;
+    allowancePolicy?: AllowancePolicy;
   };
 };
 
@@ -83,6 +114,7 @@ type NativeBridgeTransfer = BridgeTransferBase & {
     kind: 'native';
     amount: bigint;
     wrappedToken: Address;
+    allowancePolicy?: AllowancePolicy;
   };
 };
 
@@ -102,23 +134,66 @@ const getSmartAccountDetails = (smartAccount: ComposableSmartAccount, role: 'sou
     );
   }
 
+  return { chainId, accountAddress };
+};
+
+const resolveApprovalAmount = (policy: AllowancePolicy, transferAmount: bigint): bigint | null => {
+  switch (policy.strategy) {
+    case 'none':
+      return null;
+    case 'exact':
+      return transferAmount;
+    case 'max':
+      return maxUint256;
+    case 'custom':
+      return policy.amount;
+  }
+};
+
+const buildAllowanceCall = async (
+  policy: AllowancePolicy,
+  token: Address,
+  owner: Address,
+  spender: Address,
+  transferAmount: bigint,
+  publicClient: EtheraPublicClient
+): Promise<UserOpCall | null> => {
+  const approvalAmount = resolveApprovalAmount(policy, transferAmount);
+  if (approvalAmount === null) return null;
+
+  const currentAllowance = await publicClient.readContract({
+    address: token,
+    abi: erc20Abi,
+    functionName: 'allowance',
+    args: [owner, spender]
+  });
+
+  if (currentAllowance >= approvalAmount) return null;
+
   return {
-    chainId,
-    accountAddress
+    to: token,
+    value: 0n,
+    data: erc20.approve({ spender, amount: approvalAmount })
   };
 };
 
-export const createBridgeTransferOperations = (params: ComposeBridgeTransferParams): UserOpsParams => {
+export const createBridgeTransferOperations = async (params: ComposeBridgeTransferParams): Promise<UserOpsParams> => {
   const source = getSmartAccountDetails(params.sourceSmartAccount, 'source');
   const destination = getSmartAccountDetails(params.destinationSmartAccount, 'destination');
   const recipient = params.recipient ?? destination.accountAddress;
+
+  const encodeSendFn = params.bridgeConfig?.encodeSend ?? ((p: BridgeSendParams) => bridge.send(p));
+  const encodeReceiveTokensFn =
+    params.bridgeConfig?.encodeReceiveTokens ?? ((p: BridgeReceiveParams) => bridge.receiveTokens(p));
+
+  const policy = params.asset.allowancePolicy ?? { strategy: 'exact' };
 
   const sourceCalls: UserOpCall[] = [];
   const destinationCalls: UserOpCall[] = [
     {
       to: params.destinationBridge,
       value: 0n,
-      data: bridge.receiveTokens({
+      data: encodeReceiveTokensFn({
         otherChainId: BigInt(source.chainId),
         sender: source.accountAddress,
         receiver: destination.accountAddress,
@@ -141,10 +216,20 @@ export const createBridgeTransferOperations = (params: ComposeBridgeTransferPara
       });
     }
 
+    const approvalCall = await buildAllowanceCall(
+      policy,
+      params.asset.token,
+      source.accountAddress,
+      params.sourceBridge,
+      params.asset.amount,
+      params.sourceSmartAccount.publicClient
+    );
+    if (approvalCall) sourceCalls.push(approvalCall);
+
     sourceCalls.push({
       to: params.sourceBridge,
       value: 0n,
-      data: bridge.send({
+      data: encodeSendFn({
         otherChainId: BigInt(destination.chainId),
         token: params.asset.token,
         sender: source.accountAddress,
@@ -172,10 +257,20 @@ export const createBridgeTransferOperations = (params: ComposeBridgeTransferPara
       data: wrappedNative.deposit()
     });
 
+    const approvalCall = await buildAllowanceCall(
+      policy,
+      params.asset.wrappedToken,
+      source.accountAddress,
+      params.sourceBridge,
+      params.asset.amount,
+      params.sourceSmartAccount.publicClient
+    );
+    if (approvalCall) sourceCalls.push(approvalCall);
+
     sourceCalls.push({
       to: params.sourceBridge,
       value: 0n,
-      data: bridge.send({
+      data: encodeSendFn({
         otherChainId: BigInt(destination.chainId),
         token: params.asset.wrappedToken,
         sender: source.accountAddress,
@@ -189,9 +284,7 @@ export const createBridgeTransferOperations = (params: ComposeBridgeTransferPara
     destinationCalls.push({
       to: params.asset.wrappedToken,
       value: 0n,
-      data: wrappedNative.withdraw({
-        wad: params.asset.amount
-      })
+      data: wrappedNative.withdraw({ wad: params.asset.amount })
     });
 
     if (recipient !== destination.accountAddress) {
@@ -204,17 +297,11 @@ export const createBridgeTransferOperations = (params: ComposeBridgeTransferPara
   }
 
   return [
-    {
-      smartAccount: params.sourceSmartAccount,
-      calls: sourceCalls
-    },
-    {
-      smartAccount: params.destinationSmartAccount,
-      calls: destinationCalls
-    }
+    { smartAccount: params.sourceSmartAccount, calls: sourceCalls },
+    { smartAccount: params.destinationSmartAccount, calls: destinationCalls }
   ];
 };
 
-export const composeBridgeTransfer = (params: ComposeBridgeTransferParams, options: UserOpsOptions = {}) => {
-  return composeUserOps(createBridgeTransferOperations(params), options);
+export const composeBridgeTransfer = async (params: ComposeBridgeTransferParams, options: UserOpsOptions = {}) => {
+  return composeUserOps(await createBridgeTransferOperations(params), options);
 };
