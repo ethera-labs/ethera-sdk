@@ -3,7 +3,7 @@ import { createAbiEncoder } from '@/utils/abi';
 import { composeBridgeTransfer, createBridgeTransferOperations } from '@/utils/recipes';
 import { composeUserOps } from '@/utils/user-operations';
 import type { ComposableSmartAccount } from '@/types';
-import type { Address } from 'viem';
+import type { Address, Hex } from 'viem';
 import { erc20Abi, maxUint256 } from 'viem';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -183,13 +183,46 @@ describe('bridge recipes', () => {
 
     expect(composeUserOps).toHaveBeenCalledOnce();
     expect(composeUserOps).toHaveBeenCalledWith(
-      expect.arrayContaining([
-        expect.objectContaining({ smartAccount: sourceSmartAccount }),
-        expect.objectContaining({ smartAccount: destinationSmartAccount })
-      ]),
+      [
+        expect.objectContaining({
+          smartAccount: sourceSmartAccount,
+          calls: expect.arrayContaining([
+            expect.objectContaining({ to: token, value: 0n }),
+            expect.objectContaining({ to: sourceBridge, value: 0n })
+          ])
+        }),
+        expect.objectContaining({
+          smartAccount: destinationSmartAccount,
+          calls: expect.arrayContaining([
+            expect.objectContaining({ to: destinationBridge, value: 0n }),
+            expect.objectContaining({ to: token, value: 0n })
+          ])
+        })
+      ],
       { onPayloadEncoded: expect.any(Function) }
     );
+    const [[ops]] = (composeUserOps as unknown as ReturnType<typeof vi.fn>).mock.calls;
+    expect(ops[0].calls).toHaveLength(2);
+    expect(ops[1].calls).toHaveLength(2);
     expect(result).toBe(expectedResult);
+  });
+
+  it('rejects zero-amount transfers', async () => {
+    await expect(
+      createBridgeTransferOperations({
+        sourceSmartAccount,
+        destinationSmartAccount,
+        sourceBridge,
+        destinationBridge,
+        sessionId: 1n,
+        asset: { kind: 'erc20', token, amount: 0n }
+      })
+    ).rejects.toThrowError(
+      expect.objectContaining<Partial<EtheraError>>({
+        code: 'BRIDGE_AMOUNT_INVALID',
+        details: { method: 'createBridgeTransferOperations' }
+      })
+    );
   });
 
   it('rejects smart accounts without addresses', async () => {
@@ -280,8 +313,8 @@ describe('bridge recipes', () => {
   });
 
   it('uses custom bridge encoding functions when provided', async () => {
-    const customSendData = '0xcustomsend' as Address;
-    const customReceiveData = '0xcustomreceive' as Address;
+    const customSendData = '0xcustomsend' as Hex;
+    const customReceiveData = '0xcustomreceive' as Hex;
     const encodeSend = vi.fn().mockReturnValue(customSendData);
     const encodeReceiveTokens = vi.fn().mockReturnValue(customReceiveData);
 

@@ -84,6 +84,9 @@ export type BridgeReceiveParams = {
   srcBridge: Address;
 };
 
+// Swap the encoding for contracts that share the same call semantics but use a
+// different ABI. For bridges with extra parameters (fees, adapter options, chain
+// selectors) the parameter set itself differs — use composeUserOps directly.
 export type BridgeConfig = {
   encodeSend?: (params: BridgeSendParams) => Hex;
   encodeReceiveTokens?: (params: BridgeReceiveParams) => Hex;
@@ -161,6 +164,12 @@ const buildAllowanceCall = async (
   const approvalAmount = resolveApprovalAmount(policy, transferAmount);
   if (approvalAmount === null) return null;
 
+  // Allowance is read at compose time, not execution time. A concurrent tx or a
+  // sibling composeBridgeTransfer call in the same session could deplete it before
+  // the composed bundle executes. Multiple calls for the same token/spender are not
+  // coalesced — each reads independently. If you know the allowance is already
+  // sufficient (e.g. a prior max approval), use { strategy: 'none' } to skip the
+  // round-trip entirely.
   const currentAllowance = await publicClient.readContract({
     address: token,
     abi: erc20Abi,
@@ -178,6 +187,12 @@ const buildAllowanceCall = async (
 };
 
 export const createBridgeTransferOperations = async (params: ComposeBridgeTransferParams): Promise<UserOpsParams> => {
+  if (params.asset.amount === 0n) {
+    throw new EtheraError('BRIDGE_AMOUNT_INVALID', 'Bridge transfer amount must be greater than zero.', {
+      details: { method: 'createBridgeTransferOperations' }
+    });
+  }
+
   const source = getSmartAccountDetails(params.sourceSmartAccount, 'source');
   const destination = getSmartAccountDetails(params.destinationSmartAccount, 'destination');
   const recipient = params.recipient ?? destination.accountAddress;
