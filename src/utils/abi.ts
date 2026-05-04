@@ -1,15 +1,15 @@
 import { stringifyBigints } from '@/utils/bigint';
 import type {
-    Abi,
-    AbiFunction,
-    AbiParameter,
-    AbiParametersToPrimitiveTypes,
-    AbiParameterToPrimitiveType,
-    AbiType,
-    AbiTypeToPrimitiveType,
-    ExtractAbiFunction,
-    ExtractAbiFunctionNames,
-    ExtractAbiFunctions
+  Abi,
+  AbiFunction,
+  AbiParameter,
+  AbiParametersToPrimitiveTypes,
+  AbiParameterToPrimitiveType,
+  AbiType,
+  AbiTypeToPrimitiveType,
+  ExtractAbiFunction,
+  ExtractAbiFunctionNames,
+  ExtractAbiFunctions
 } from 'abitype';
 import { encodeFunctionData, type Hex } from 'viem';
 
@@ -52,32 +52,38 @@ export const extractAbiFunction = <abi extends Abi, functionName extends Extract
   }) as ExtractAbiFunction<abi, functionName>;
 };
 
-export type AbiEncoder<T extends AbiFunction[]> = {
-  [Fn in T[number] as Fn['name']]: Fn['inputs'] extends readonly []
+export type AbiEncoder<T extends Abi> = {
+  [Fn in ExtractAbiFunctions<T, 'nonpayable' | 'payable'> as Fn['name'] & string]: (Fn &
+    AbiFunction)['inputs'] extends readonly []
     ? () => Hex
-    : (params: AbiInputsToParams<Fn['inputs']>) => Hex;
+    : (params: AbiInputsToParams<(Fn & AbiFunction)['inputs']>) => Hex;
 };
 
-export const createAbiEncoder = <T extends Abi = Abi>(
-  abi: T
-  //@ts-expect-error - TODO: fix this
-): AbiEncoder<ExtractAbiFunctions<T, 'nonpayable' | 'payable'>[]> => {
-  const writeFunctions = abi.filter(
-    (item) => item.type === 'function' && item.stateMutability !== 'view' && item.stateMutability !== 'pure'
-  ) as AbiFunction[];
+function toEncodeFunctionDataParams<T extends Abi>(params: {
+  abi: T;
+  functionName: string;
+  args: readonly unknown[];
+}): Parameters<typeof encodeFunctionData>[0] {
+  return params as Parameters<typeof encodeFunctionData>[0];
+}
 
-  return writeFunctions.reduce((acc, abiFn) => {
-    return {
-      ...acc,
-      [abiFn.name]: (params?: AbiInputsToParams<typeof abiFn.inputs>) => {
-        // @ts-expect-error - TODO: fix this
-        return encodeFunctionData({
-          abi,
-          functionName: abiFn.name,
-          args: !params ? [] : paramsToArray({ params, abiFunction: abiFn })
-        });
-      }
-    };
-  }, {} as any);
+const isWriteFunction = (item: Abi[number]): item is AbiFunction =>
+  item.type === 'function' && item.stateMutability !== 'view' && item.stateMutability !== 'pure';
+
+export const createAbiEncoder = <T extends Abi>(abi: T): AbiEncoder<T> => {
+  const writeFunctions = abi.filter(isWriteFunction);
+
+  return Object.fromEntries(
+    writeFunctions.map((abiFn) => [
+      abiFn.name,
+      (params?: AbiInputsToParams<typeof abiFn.inputs>) =>
+        encodeFunctionData(
+          toEncodeFunctionDataParams({
+            abi,
+            functionName: abiFn.name,
+            args: params ? paramsToArray({ params, abiFunction: abiFn }) : []
+          })
+        )
+    ])
+  ) as AbiEncoder<T>;
 };
-

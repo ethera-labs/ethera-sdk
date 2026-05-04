@@ -1,7 +1,7 @@
-import { createAbiEncoder } from '@/utils/abi';
+import { createAbiEncoder, extractAbiFunction, paramsToArray } from '@/utils/abi';
 import type { Abi } from 'abitype';
 import { encodeFunctionData } from 'viem';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 describe('createAbiEncoder', () => {
   const mockAbi = [
@@ -370,5 +370,192 @@ describe('createAbiEncoder', () => {
     expect(customEncoded).toBe(viemEncoded);
     expect(typeof customEncoded).toBe('string');
     expect(customEncoded.startsWith('0x')).toBe(true);
+  });
+
+  it('skips non-function items (events, errors, constructor)', () => {
+    const mixedAbi = [
+      {
+        type: 'event',
+        name: 'Transfer',
+        inputs: [
+          { name: 'from', type: 'address', indexed: true },
+          { name: 'to', type: 'address', indexed: true },
+          { name: 'value', type: 'uint256', indexed: false }
+        ]
+      },
+      {
+        type: 'error',
+        name: 'InsufficientBalance',
+        inputs: [{ name: 'available', type: 'uint256' }]
+      },
+      {
+        type: 'constructor',
+        inputs: [{ name: 'owner', type: 'address' }],
+        stateMutability: 'nonpayable'
+      },
+      {
+        type: 'function',
+        name: 'burn',
+        inputs: [{ name: 'amount', type: 'uint256' }],
+        outputs: [],
+        stateMutability: 'nonpayable'
+      }
+    ] as const;
+
+    const encoder = createAbiEncoder(mixedAbi);
+
+    expect(Object.keys(encoder)).toEqual(['burn']);
+  });
+
+  it('skips fallback and receive items', () => {
+    const withFallbackAbi = [
+      { type: 'fallback', stateMutability: 'nonpayable' },
+      { type: 'receive', stateMutability: 'payable' },
+      {
+        type: 'function',
+        name: 'withdraw',
+        inputs: [],
+        outputs: [],
+        stateMutability: 'nonpayable'
+      }
+    ] as const;
+
+    const encoder = createAbiEncoder(withFallbackAbi);
+
+    expect(Object.keys(encoder)).toEqual(['withdraw']);
+  });
+
+  it('produces correct 4-byte selector for transfer(address,uint256)', () => {
+    const transferAbi = [
+      {
+        type: 'function',
+        name: 'transfer',
+        inputs: [
+          { name: 'to', type: 'address' },
+          { name: 'amount', type: 'uint256' }
+        ],
+        outputs: [],
+        stateMutability: 'nonpayable'
+      }
+    ] as const;
+
+    const encoder = createAbiEncoder(transferAbi);
+    const encoded = encoder.transfer({
+      to: '0x0000000000000000000000000000000000000001',
+      amount: 0n
+    });
+
+    expect(encoded.slice(0, 10)).toBe('0xa9059cbb');
+  });
+});
+
+describe('paramsToArray', () => {
+  const transferFn = {
+    type: 'function',
+    name: 'transfer',
+    inputs: [
+      { name: 'to', type: 'address' },
+      { name: 'amount', type: 'uint256' }
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable'
+  } as const;
+
+  it('maps named params to array in ABI input order', () => {
+    const result = paramsToArray({
+      params: {
+        to: '0x1234567890123456789012345678901234567890' as const,
+        amount: 42n
+      },
+      abiFunction: transferFn
+    });
+
+    expect(result).toEqual(['0x1234567890123456789012345678901234567890', '42']);
+  });
+
+  it('warns and inserts undefined for NaN values', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const singleNumFn = {
+      type: 'function',
+      name: 'setFee',
+      inputs: [{ name: 'fee', type: 'uint256' }],
+      outputs: [],
+      stateMutability: 'nonpayable'
+    } as const;
+
+    paramsToArray({
+      params: { fee: NaN as unknown as bigint },
+      abiFunction: singleNumFn
+    });
+
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('[fee]'));
+    warnSpy.mockRestore();
+  });
+
+  it('skips inputs without a name', () => {
+    const unnamedFn = {
+      type: 'function',
+      name: 'anon',
+      inputs: [
+        { name: '', type: 'uint256' },
+        { name: 'value', type: 'uint256' }
+      ],
+      outputs: [],
+      stateMutability: 'nonpayable'
+    } as const;
+
+    const result = paramsToArray({
+      params: { value: 7n } as Record<string, bigint>,
+      abiFunction: unnamedFn
+    });
+
+    expect(result).toEqual(['7']);
+  });
+});
+
+describe('extractAbiFunction', () => {
+  const multiAbi = [
+    {
+      type: 'event',
+      name: 'Transfer',
+      inputs: [],
+      anonymous: false
+    },
+    {
+      type: 'function',
+      name: 'approve',
+      inputs: [
+        { name: 'spender', type: 'address' },
+        { name: 'amount', type: 'uint256' }
+      ],
+      outputs: [{ type: 'bool' }],
+      stateMutability: 'nonpayable'
+    },
+    {
+      type: 'function',
+      name: 'transfer',
+      inputs: [
+        { name: 'to', type: 'address' },
+        { name: 'amount', type: 'uint256' }
+      ],
+      outputs: [],
+      stateMutability: 'nonpayable'
+    }
+  ] as const;
+
+  it('returns the matching ABI function', () => {
+    const fn = extractAbiFunction(multiAbi, 'transfer');
+
+    expect(fn.name).toBe('transfer');
+    expect(fn.type).toBe('function');
+    expect(fn.inputs).toHaveLength(2);
+  });
+
+  it('skips non-function items with same name', () => {
+    const fn = extractAbiFunction(multiAbi, 'approve');
+
+    expect(fn.name).toBe('approve');
+    expect(fn.type).toBe('function');
   });
 });
