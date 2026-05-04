@@ -1,13 +1,14 @@
+import type * as PaymasterImportType from '@/api/paymaster';
 import { getPaymasterDataForChain } from '@/api/paymaster';
-import type { EtheraConfigReturnType } from '@/types';
+import type { CreatedUserOp, EtheraConfigReturnType, EtheraRpcSchema, SignedUserOps, UserOpCall } from '@/types';
 import type { EtheraError } from '@/errors';
-import type { CreatedUserOp, EtheraRpcSchema, SignedUserOps, UserOpCall } from '@/types';
 import {
   composePreparedUserOps,
   composeSignedUserOps,
   composeUnpreparedUserOps,
   composeUserOps,
-  createUserOps
+  createUserOps,
+  validateComposePlan
 } from '@/utils/user-operations';
 import type { CreateKernelAccountReturnType } from '@zerodev/sdk';
 import {
@@ -25,9 +26,14 @@ vi.mock('@zerodev/multi-chain-ecdsa-validator', () => ({
   signUserOperations: vi.fn()
 }));
 
-vi.mock('@/api/paymaster', () => ({
-  getPaymasterDataForChain: vi.fn()
-}));
+vi.mock('@/api/paymaster', async () => {
+  const actual = await vi.importActual<typeof PaymasterImportType>('@/api/paymaster');
+
+  return {
+    ...actual,
+    getPaymasterDataForChain: vi.fn()
+  };
+});
 
 const createCanonical = (sig: string | undefined = undefined) => ({
   sender: '0x0000000000000000000000000000000000000000' as Address,
@@ -74,7 +80,7 @@ const createMockPublicClient = (chainId = 1, explorerUrl = 'https://explorer.tes
 
 const baseConfig: EtheraConfigReturnType = {
   getPublicClient: () => undefined as never,
-  getEntryPoint: () => ({} as never),
+  getEntryPoint: () => ({}) as never,
   hasPaymaster: false,
   getPaymasterEndpoint: undefined,
   accountAbstractionContracts: {},
@@ -316,6 +322,119 @@ describe('compose user operations', () => {
       ['https://explorer.a/tx/0xhash1', 'https://explorer.b/tx/0xhash2']
     );
     expect(result.payload).toBe('0xencoded');
+    expect(result.sessionId).toMatch(/^compose-/);
+    expect(result.operations).toEqual([
+      expect.objectContaining({
+        operationIndex: 0,
+        chainId: 1,
+        hash: '0xhash1',
+        explorerUrl: 'https://explorer.a/tx/0xhash1',
+        sessionId: result.sessionId,
+        operationId: `${result.sessionId}:0:1`
+      }),
+      expect.objectContaining({
+        operationIndex: 1,
+        chainId: 2,
+        hash: '0xhash2',
+        explorerUrl: 'https://explorer.b/tx/0xhash2',
+        sessionId: result.sessionId,
+        operationId: `${result.sessionId}:1:2`
+      })
+    ]);
+  });
+
+  it('emits lifecycle callbacks in a stable order with normalized payloads', async () => {
+    const { operations } = buildOperationsForComposition();
+    (prepareAndSignUserOperations as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { sig: 'a' },
+      { sig: 'b' }
+    ]);
+
+    const events: string[] = [];
+    const onSign = vi.fn((payload) => {
+      events.push(`sign:${payload.operationIndex}:${payload.chainId}`);
+    });
+    const onSigned = vi.fn(() => {
+      events.push('signed');
+    });
+    const onBuild = vi.fn((payload) => {
+      events.push(`build:${payload.operationIndex}:${payload.chainId}`);
+    });
+    const onComposed = vi.fn(() => {
+      events.push('composed');
+    });
+    const onPayloadEncoded = vi.fn(() => {
+      events.push('payload');
+    });
+    const onSubmit = vi.fn((payload) => {
+      events.push(`submit:${payload.hashes.join(',')}`);
+    });
+    const onReceipt = vi.fn((payload) => {
+      events.push(`receipt:${payload.operationIndex}:${payload.chainId}`);
+    });
+
+    const result = await composeUnpreparedUserOps(operations, {
+      onSign,
+      onSigned,
+      onBuild,
+      onComposed,
+      onPayloadEncoded,
+      onSubmit,
+      onReceipt
+    });
+    const sendResult = await result.send();
+    await sendResult.wait();
+
+    expect(events).toEqual([
+      'sign:0:1',
+      'sign:1:2',
+      'signed',
+      'build:0:1',
+      'build:1:2',
+      'composed',
+      'payload',
+      'submit:0xhash1,0xhash2',
+      'receipt:0:1',
+      'receipt:1:2'
+    ]);
+
+    expect(onSign).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        operationIndex: 0,
+        chainId: 1,
+        signedUserOp: createCanonical('a'),
+        sessionId: result.sessionId,
+        operationId: `${result.sessionId}:0:1`
+      })
+    );
+    expect(onBuild).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        operationIndex: 1,
+        chainId: 2,
+        hash: '0xhash2',
+        explorerUrl: 'https://explorer.b/tx/0xhash2',
+        sessionId: result.sessionId,
+        operationId: `${result.sessionId}:1:2`,
+        build: { hash: '0xhash2', raw: '0xraw2' }
+      })
+    );
+    expect(onSubmit).toHaveBeenCalledWith({
+      sessionId: result.sessionId,
+      payload: '0xencoded',
+      hashes: ['0xhash1', '0xhash2'],
+      operations: result.operations
+    });
+    expect(onReceipt).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        operationIndex: 0,
+        chainId: 1,
+        hash: '0xhash1',
+        receipt: { status: 'success' }
+      })
+    );
   });
 
   it('creates and composes user operations from smart accounts', async () => {
@@ -500,10 +619,91 @@ describe('compose user operations', () => {
       params: [result.payload]
     });
     expect(sendResult.hashes).toEqual(['0xhash1', '0xhash2']);
+    expect(sendResult.sessionId).toBe(result.sessionId);
+    expect(sendResult.operations).toEqual(result.operations);
 
     await sendResult.wait();
     expect(publicClientA.waitForTransactionReceipt).toHaveBeenCalledWith({ hash: '0xhash1' });
     expect(publicClientB.waitForTransactionReceipt).toHaveBeenCalledWith({ hash: '0xhash2' });
+  });
+
+  it('validates compose plans locally and reports paymaster readiness', () => {
+    const result = validateComposePlan(
+      [
+        {
+          smartAccount: {
+            account: {
+              address: '0x00000000000000000000000000000000000000a1',
+              client: { chain: { id: 1 } },
+              createUserOp: vi.fn()
+            },
+            publicClient: createMockPublicClient(1)
+          },
+          calls: [
+            { to: '0x0000000000000000000000000000000000000011' as Address, data: '0x' as Hex },
+            { to: '0x0000000000000000000000000000000000000022' as Address, value: 1n, data: '0x12' as Hex }
+          ]
+        }
+      ],
+      {
+        config: {
+          hasPaymaster: true,
+          getPaymasterEndpoint: ({ method, chainId }) => `https://paymaster.test/${chainId}/${method}`
+        }
+      }
+    );
+
+    expect(result.sessionId).toMatch(/^compose-/);
+    expect(result.hasPaymaster).toBe(true);
+    expect(result.operations).toEqual([
+      {
+        operationIndex: 0,
+        operationId: `${result.sessionId}:0:1`,
+        sessionId: result.sessionId,
+        chainId: 1,
+        accountAddress: '0x00000000000000000000000000000000000000a1',
+        callCount: 2,
+        paymasterEndpoints: {
+          sponsorUserOperation: 'https://paymaster.test/1/pm_sponsorUserOperation',
+          getPaymasterStubData: 'https://paymaster.test/1/pm_getPaymasterStubData'
+        }
+      }
+    ]);
+  });
+
+  it('rejects invalid paymaster endpoints during validateComposePlan', () => {
+    expect(() =>
+      validateComposePlan(
+        [
+          {
+            smartAccount: {
+              account: {
+                address: '0x00000000000000000000000000000000000000a1',
+                client: { chain: { id: 1 } },
+                createUserOp: vi.fn()
+              },
+              publicClient: createMockPublicClient(1)
+            },
+            calls: [{ to: '0x0000000000000000000000000000000000000011' as Address, data: '0x' as Hex }]
+          }
+        ],
+        {
+          config: {
+            hasPaymaster: true,
+            getPaymasterEndpoint: () => 'not-a-url'
+          }
+        }
+      )
+    ).toThrowError(
+      expect.objectContaining<Partial<EtheraError>>({
+        code: 'PAYMASTER_ENDPOINT_INVALID',
+        details: {
+          method: 'pm_sponsorUserOperation',
+          chainId: 1,
+          value: 'not-a-url'
+        }
+      })
+    );
   });
 
   it('falls back to transaction hashes when explorer metadata is missing', async () => {

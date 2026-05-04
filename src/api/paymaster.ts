@@ -29,7 +29,7 @@ export type GetPaymasterDataForChainParams = {
 
 const hexify = (n: number | bigint | undefined) => (n ? numberToHex(n) : undefined);
 
-const getValidatedPaymasterEndpoint = ({
+export const getValidatedPaymasterEndpoint = ({
   method,
   chainId,
   getPaymasterEndpoint
