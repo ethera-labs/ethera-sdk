@@ -1,7 +1,7 @@
+import type * as PaymasterImportType from '@/api/paymaster';
 import { getPaymasterDataForChain } from '@/api/paymaster';
-import type { EtheraConfigReturnType } from '@/types';
+import type { CreatedUserOp, EtheraConfigReturnType, EtheraRpcSchema, SignedUserOps, UserOpCall } from '@/types';
 import type { EtheraError } from '@/errors';
-import type { CreatedUserOp, EtheraRpcSchema, SignedUserOps, UserOpCall } from '@/types';
 import {
   composePreparedUserOps,
   composeSignedUserOps,
@@ -27,7 +27,7 @@ vi.mock('@zerodev/multi-chain-ecdsa-validator', () => ({
 }));
 
 vi.mock('@/api/paymaster', async () => {
-  const actual = await vi.importActual<typeof import('@/api/paymaster')>('@/api/paymaster');
+  const actual = await vi.importActual<typeof PaymasterImportType>('@/api/paymaster');
 
   return {
     ...actual,
@@ -80,7 +80,7 @@ const createMockPublicClient = (chainId = 1, explorerUrl = 'https://explorer.tes
 
 const baseConfig: EtheraConfigReturnType = {
   getPublicClient: () => undefined as never,
-  getEntryPoint: () => ({} as never),
+  getEntryPoint: () => ({}) as never,
   hasPaymaster: false,
   getPaymasterEndpoint: undefined,
   accountAbstractionContracts: {},
