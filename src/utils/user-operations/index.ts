@@ -448,9 +448,6 @@ export const validateComposePlan = (
       return {
         ...descriptor,
         callCount: normalizedOperations[operationIndex].calls.length,
-        accountReady: true,
-        chainReady: true,
-        paymasterReady: !hasPaymaster || Boolean(paymasterEndpoints),
         ...(paymasterEndpoints ? { paymasterEndpoints } : {})
       };
     })

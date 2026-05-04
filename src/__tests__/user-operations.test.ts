@@ -663,9 +663,6 @@ describe('compose user operations', () => {
         chainId: 1,
         accountAddress: '0x00000000000000000000000000000000000000a1',
         callCount: 2,
-        accountReady: true,
-        chainReady: true,
-        paymasterReady: true,
         paymasterEndpoints: {
           sponsorUserOperation: 'https://paymaster.test/1/pm_sponsorUserOperation',
           getPaymasterStubData: 'https://paymaster.test/1/pm_getPaymasterStubData'

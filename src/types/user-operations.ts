@@ -100,9 +100,6 @@ export type ComposeReceiptCallbackPayload = ComposedOperationMetadata & {
 
 export type ValidateComposePlanOperation = ComposeOperationIdentity & {
   callCount: number;
-  accountReady: true;
-  chainReady: true;
-  paymasterReady: boolean;
   paymasterEndpoints?: {
     sponsorUserOperation: string;
     getPaymasterStubData: string;
