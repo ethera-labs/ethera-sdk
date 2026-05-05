@@ -722,7 +722,7 @@ function useSmartAccount({
 
 **Note:** The hook automatically enables/disables based on wallet connection status.
 
-**Gas estimation note:** `multiChainIds` controls the Merkle tree size used in the stub signature during gas estimation — it does not affect the account address. `useSmartAccount` defaults to `[]` (1-leaf tree), `useSmartAccounts` defaults to `chainIds` (N-leaf tree matching the compose set). For accurate gas estimation in a multi-chain compose, pass `multiChainIds` explicitly with all chains involved in the session.
+**Gas estimation note:** `multiChainIds` controls the Merkle tree size used in the stub signature during gas estimation — it does not affect the account address. Both hooks default to `[]` (1-leaf tree). For accurate gas estimation in a multi-chain compose, pass `multiChainIds` explicitly with all chains involved in the session.
 
 #### `useSmartAccounts`
 
@@ -766,7 +766,7 @@ const smartAccountA = accounts[rollupA.id].data;
 const smartAccountB = accounts[rollupB.id].data;
 ```
 
-**Note:** Prefer `useSmartAccounts` over multiple `useSmartAccount` calls when composing operations across a known set of chains — it shares the same multi-chain validator scope and avoids independent query key drift.
+**Note:** Prefer `useSmartAccounts` over multiple `useSmartAccount` calls when composing operations across a known set of chains — a single `multiChainIds` value is shared across all queries, avoiding query key drift.
 
 ### Helper Functions
 

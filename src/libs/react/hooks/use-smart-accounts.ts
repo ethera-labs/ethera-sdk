@@ -26,7 +26,7 @@ export const useSmartAccounts = ({ chainIds, multiChainIds = [] }: Props) => {
         }
 
         return createSmartAccount(
-          { signer: walletClient.data, chainId, multiChainIds: multiChainIds },
+          { signer: walletClient.data, chainId, multiChainIds },
           etheraConfig
         );
       },
