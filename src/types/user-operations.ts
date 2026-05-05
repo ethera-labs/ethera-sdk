@@ -16,6 +16,13 @@ export type UserOpCall = {
   data: Hex;
 };
 
+export type GasOverrides = {
+  callGasLimit?: bigint;
+  verificationGasLimit?: bigint;
+  preVerificationGas?: bigint;
+  callGasMultiplierPct?: bigint;
+};
+
 export type CreatedUserOp = {
   account: CreateKernelAccountReturnType<'0.7'>;
   chainId: number;
@@ -49,7 +56,7 @@ type ChainAwareAccount = {
 
 export type CreateUserOpCapableAccount = ChainAwareAccount & {
   address?: Address;
-  createUserOp: (calls: UserOpCall[]) => Promise<SmartAccountUserOp>;
+  createUserOp: (calls: UserOpCall[], gasOptions?: GasOverrides) => Promise<SmartAccountUserOp>;
 };
 
 export type ComposableSmartAccount = {
