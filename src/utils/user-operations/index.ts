@@ -305,7 +305,7 @@ const composeSignedUserOpsInternal = async (
       senderId: 'client',
       entries: builds.map((build, operationIndex) => ({
         chainId: operations[operationIndex].publicClient.chain!.id,
-        rawTx: build.raw as `0x${string}`
+        rawTx: build.raw
       }))
     });
   } catch (cause) {

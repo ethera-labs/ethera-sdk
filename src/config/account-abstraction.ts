@@ -45,7 +45,11 @@ export const getAccountAbstractionContractsForChain = <TChainId extends number>(
     }
   }
 
-  return contracts as AccountAbstractionContracts;
+  return {
+    kernelImpl: contracts.kernelImpl!,
+    kernelFactory: contracts.kernelFactory!,
+    multichainValidator: contracts.multichainValidator!
+  };
 };
 
 export const validateAccountAbstractionContracts = <TChainId extends number>(
