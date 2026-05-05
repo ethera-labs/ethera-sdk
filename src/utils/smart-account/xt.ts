@@ -1,6 +1,6 @@
 import type { INamespace } from 'protobufjs/light';
 import protobuf from 'protobufjs/light';
-import { type Hex, hexToBytes } from 'viem';
+import { type Hex, bytesToHex, hexToBytes } from 'viem';
 
 // Minimal protobuf schema for the messages we need
 const rootJson = {
@@ -64,7 +64,7 @@ export function encodeXtMessage(params: {
   });
   const bytes = Message.encode(msg).finish();
   // return btoa(String.fromCharCode(...bytes));
-  return ('0x' + bytesToHex(bytes)) as Hex;
+  return bytesToHex(bytes);
 }
 
 function toBigEndianBytes(id: number | bigint): Uint8Array {
@@ -79,11 +79,3 @@ function toBigEndianBytes(id: number | bigint): Uint8Array {
   return Uint8Array.from(out);
 }
 
-function bytesToHex(u8: Uint8Array): string {
-  const hex: string[] = new Array(u8.length);
-  for (let i = 0; i < u8.length; i++) {
-    const h = u8[i].toString(16).padStart(2, '0');
-    hex[i] = h;
-  }
-  return hex.join('');
-}

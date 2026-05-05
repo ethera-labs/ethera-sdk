@@ -878,3 +878,102 @@ describe('compose user operations', () => {
     );
   });
 });
+
+describe('structured error wrapping', () => {
+  const publicClient = createMockPublicClient(1);
+  const signedOp = {
+    publicClient,
+    account: createMockAccount(1),
+    signedCanonicalOps: createCanonical()
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('wraps compose_buildSignedUserOpsTx failure as COMPOSE_BUILD_FAILURE with cause', async () => {
+    const rootCause = new Error('rpc error');
+    (publicClient.request as unknown as ReturnType<typeof vi.fn>).mockRejectedValue(rootCause);
+
+    await expect(composeSignedUserOps([signedOp])).rejects.toThrowError(
+      expect.objectContaining<Partial<EtheraError>>({
+        code: 'COMPOSE_BUILD_FAILURE',
+        cause: rootCause,
+        details: expect.objectContaining({ method: 'composeSignedUserOpsInternal', operationIndex: 0, chainId: 1 })
+      })
+    );
+  });
+
+  it('wraps encodeXtMessage failure as PAYLOAD_ENCODING_FAILURE with cause', async () => {
+    const rootCause = new Error('encode error');
+    (publicClient.request as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      hash: '0xabc' as Hex,
+      raw: '0xraw'
+    });
+    vi.mocked(encodeXtMessage).mockImplementation(() => { throw rootCause; });
+
+    await expect(composeSignedUserOps([signedOp])).rejects.toThrowError(
+      expect.objectContaining<Partial<EtheraError>>({
+        code: 'PAYLOAD_ENCODING_FAILURE',
+        cause: rootCause
+      })
+    );
+  });
+
+  it('wraps eth_sendXTransaction failure as SEND_FAILURE with cause', async () => {
+    const rootCause = new Error('send error');
+    vi.mocked(encodeXtMessage).mockReturnValue('0xpayload' as Hex);
+    (publicClient.request as unknown as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({ hash: '0xabc' as Hex, raw: '0xraw' })
+      .mockRejectedValueOnce(rootCause);
+
+    const result = await composeSignedUserOps([signedOp]);
+
+    await expect(result.send()).rejects.toThrowError(
+      expect.objectContaining<Partial<EtheraError>>({
+        code: 'SEND_FAILURE',
+        cause: rootCause
+      })
+    );
+  });
+
+  it('wraps prepareAndSignUserOperations failure as SIGNING_FAILURE with cause', async () => {
+    const rootCause = new Error('signing failed');
+    vi.mocked(prepareAndSignUserOperations).mockRejectedValue(rootCause);
+
+    const unpreparedOp = {
+      publicClient,
+      account: createMockAccount(1),
+      userOp: {} as never,
+      signer: {} as never,
+      chainId: 1
+    };
+
+    await expect(composeUnpreparedUserOps([unpreparedOp])).rejects.toThrowError(
+      expect.objectContaining<Partial<EtheraError>>({
+        code: 'SIGNING_FAILURE',
+        cause: rootCause,
+        details: expect.objectContaining({ method: 'composeUnpreparedUserOps' })
+      })
+    );
+  });
+
+  it('wraps signUserOperations failure as SIGNING_FAILURE with cause', async () => {
+    const rootCause = new Error('signing failed');
+    vi.mocked(signUserOperations).mockRejectedValue(rootCause);
+
+    const preparedOp = {
+      publicClient,
+      account: createMockAccount(1),
+      userOp: {} as never
+    };
+
+    await expect(composePreparedUserOps([preparedOp])).rejects.toThrowError(
+      expect.objectContaining<Partial<EtheraError>>({
+        code: 'SIGNING_FAILURE',
+        cause: rootCause,
+        details: expect.objectContaining({ method: 'composePreparedUserOps' })
+      })
+    );
+  });
+});

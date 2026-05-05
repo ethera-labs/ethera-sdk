@@ -44,7 +44,7 @@ pnpm add @ssv-labs/ethera-sdk
 For direct GitHub installs, the package now builds during installation via the package `prepare` script, so `dist/` does not need to be committed:
 
 ```bash
-pnpm add github:ethera-labs/compose-sdk
+pnpm add github:ethera-labs/ethera-sdk
 ```
 
 This changes the install requirements for Git-based usage:
@@ -580,6 +580,19 @@ await publicClient.request({
 });
 ```
 
+## API Ladder
+
+Choose the entry point that matches how much control you need:
+
+| Entry point | When to use |
+|-------------|------------|
+| `composeUserOps` | Default. You have smart accounts and want the SDK to handle user-op creation, signing, encoding, and submission. |
+| `composeUnpreparedUserOps` | You already called `createUserOp` yourself and want to compose the results. |
+| `composePreparedUserOps` | You have prepared (but unsigned) user ops and want a single shared signer across chains. |
+| `composeSignedUserOps` | You have already signed canonical user ops and only need the build + send path. |
+| `composeBridgeTransfer` | You are executing a coordinated bridge flow with paired source and destination smart accounts. |
+| `encodeXtMessage` | Backend / private-key flow. You have signed raw transactions and only need to build the `eth_sendXTransaction` payload. |
+
 ## API Reference
 
 ### `createEtheraConfig`
@@ -708,6 +721,52 @@ function useSmartAccount({
 - `isError`: Boolean indicating if an error occurred
 
 **Note:** The hook automatically enables/disables based on wallet connection status.
+
+**Gas estimation note:** `multiChainIds` controls the Merkle tree size used in the stub signature during gas estimation — it does not affect the account address. Both hooks default to `[]` (1-leaf tree). For accurate gas estimation in a multi-chain compose, pass `multiChainIds` explicitly with all chains involved in the session.
+
+#### `useSmartAccounts`
+
+Batch hook to create smart accounts for multiple chains simultaneously. Built on React Query `useQueries`.
+
+```typescript
+import { useSmartAccounts } from '@ssv-labs/ethera-sdk/react';
+
+function useSmartAccounts({
+  chainIds,
+  multiChainIds
+}: {
+  chainIds: number[];
+  multiChainIds?: number[];
+}): {
+  accounts: Record<number, UseQueryResult<SmartAccountResult>>;
+  isLoading: boolean;
+  isError: boolean;
+  errors: unknown[];
+};
+```
+
+**Parameters:**
+
+- `chainIds`: Array of chain IDs to create smart accounts for
+- `multiChainIds`: Optional array of chain IDs for multi-chain stub signature sizing. Defaults to `[]`. Pass all chains in the compose session for accurate gas estimation.
+
+**Returns:**
+
+- `accounts`: Chain-keyed map of React Query results, one per requested chain ID
+- `isLoading`: `true` if any chain's account is still loading
+- `isError`: `true` if any chain's account failed
+- `errors`: Array of errors from all failed chains
+
+```tsx
+const { accounts, isLoading, isError } = useSmartAccounts({
+  chainIds: [rollupA.id, rollupB.id]
+});
+
+const smartAccountA = accounts[rollupA.id].data;
+const smartAccountB = accounts[rollupB.id].data;
+```
+
+**Note:** Prefer `useSmartAccounts` over multiple `useSmartAccount` calls when composing operations across a known set of chains — a single `multiChainIds` value is shared across all queries, avoiding query key drift.
 
 ### Helper Functions
 
@@ -956,14 +1015,27 @@ The SDK includes predefined chain configurations:
 
 You can also use custom chains by defining them with viem's `defineChain`.
 
+#### Custom Chain Onboarding Checklist
+
+When adding a chain that is not predefined in the SDK:
+
+- [ ] **Define the chain** with `defineChain` from viem, including correct `id`, `rpcUrls`, and `blockExplorers`.
+- [ ] **Deploy or locate the AA contracts** (`kernelImpl`, `kernelFactory`, `multichainValidator`) on the target chain. The SDK calls `kernelFactory.createAccount()` directly — it does **not** go through ZeroDev's canonical `KernelFactoryStaker` (MetaFactory), which is only deployed on chains ZeroDev supports natively. Your `kernelFactory` must implement the same `createAccount(bytes, bytes32)` interface.
+- [ ] **Register the contracts** in `accountAbstractionContracts` under the new chain ID when calling `createEtheraConfig`.
+- [ ] **Set an entry point** via `entryPoints` if the chain uses a non-default EntryPoint address (default is EntryPoint 0.7).
+- [ ] **Configure a paymaster** by returning an endpoint from `getPaymasterEndpoint` for the new chain ID, or accept that operations will not be sponsored on that chain.
+- [ ] **Add the chain to wagmi config** and ensure a public client is available for it.
+- [ ] **Include all session chain IDs in `multiChainIds`** when calling `createSmartAccount` or the `useSmartAccount` / `useSmartAccounts` hooks — this sizes the stub signature Merkle tree correctly for gas estimation across all chains in the compose session.
+- [ ] **Test account creation** on the new chain independently before composing cross-chain operations with it.
+
 ## Advanced Usage
 
 ### Multi-Chain Validator Setup
 
-When using `useSmartAccount` with multiple chains, ensure all chains share the same multi-chain validator configuration:
+`multiChainIds` sets the Merkle tree size used in the stub signature during gas estimation. It does not affect the account address. For accurate gas estimation, pass all chains involved in the compose session:
 
 ```typescript
-// Both hooks should use the same multiChainIds array
+// Pass all chains in the session so the stub signature matches the final Merkle tree size
 const { data: accountA } = useSmartAccount({
   chainId: rollupA.id,
   multiChainIds: [rollupA.id, rollupB.id]
@@ -973,8 +1045,6 @@ const { data: accountB } = useSmartAccount({
   chainId: rollupB.id,
   multiChainIds: [rollupA.id, rollupB.id]
 });
-
-// Both accounts will have the same address
 ```
 
 ### Gas Estimation

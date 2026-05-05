@@ -4,16 +4,13 @@ import type { PrepareUserOperationReturnType } from 'viem/account-abstraction';
 
 export function toRpcUserOpCanonical(op: PrepareUserOperationReturnType): CanonicalUserOp {
   const hx = (v: string | bigint) =>
-    typeof v === 'string' && isHex(v as `0x${string}`) ? (v as `0x${string}`) : toHex(BigInt(v || '0'));
+    typeof v === 'string' && isHex(v) ? v : toHex(BigInt(v || '0'));
 
   const initCode: `0x${string}` =
     op.initCode && isHex(op.initCode) && op.initCode !== '0x'
       ? op.initCode
       : op.factory && op.factory !== zeroAddress && op.factoryData
-        ? concatHex([
-            (op.factory.toLowerCase().startsWith('0x') ? op.factory : '0x' + op.factory) as `0x${string}`,
-            op.factoryData as `0x${string}`
-          ])
+        ? concatHex([op.factory, op.factoryData])
         : '0x';
 
   return {
