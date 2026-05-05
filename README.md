@@ -1018,7 +1018,7 @@ You can also use custom chains by defining them with viem's `defineChain`.
 When adding a chain that is not predefined in the SDK:
 
 - [ ] **Define the chain** with `defineChain` from viem, including correct `id`, `rpcUrls`, and `blockExplorers`.
-- [ ] **Deploy or locate the AA contracts** (`kernelImpl`, `kernelFactory`, `multichainValidator`) on the target chain.
+- [ ] **Deploy or locate the AA contracts** (`kernelImpl`, `kernelFactory`, `multichainValidator`) on the target chain. The SDK calls `kernelFactory.createAccount()` directly — it does **not** go through ZeroDev's canonical `KernelFactoryStaker` (MetaFactory), which is only deployed on chains ZeroDev supports natively. Your `kernelFactory` must implement the same `createAccount(bytes, bytes32)` interface.
 - [ ] **Register the contracts** in `accountAbstractionContracts` under the new chain ID when calling `createEtheraConfig`.
 - [ ] **Set an entry point** via `entryPoints` if the chain uses a non-default EntryPoint address (default is EntryPoint 0.7).
 - [ ] **Configure a paymaster** by returning an endpoint from `getPaymasterEndpoint` for the new chain ID, or accept that operations will not be sponsored on that chain.

@@ -37,6 +37,8 @@ export const createSmartAccount = async (
     kernelVersion: KERNEL_V3_1,
     accountImplementationAddress: contracts.kernelImpl,
     factoryAddress: contracts.kernelFactory,
+    // false: custom chains don't have ZeroDev's canonical KernelFactoryStaker deployed.
+    // Account address is derived from kernelFactory directly via createAccount(), not through MetaFactory.
     useMetaFactory: false
   });
   const boundCreateUserOps = createUserOps.bind(null, config, kernelAccount);
