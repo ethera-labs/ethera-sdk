@@ -44,7 +44,7 @@ pnpm add @ssv-labs/ethera-sdk
 For direct GitHub installs, the package now builds during installation via the package `prepare` script, so `dist/` does not need to be committed:
 
 ```bash
-pnpm add github:ethera-labs/compose-sdk
+pnpm add github:ethera-labs/ethera-sdk
 ```
 
 This changes the install requirements for Git-based usage:
@@ -580,6 +580,19 @@ await publicClient.request({
 });
 ```
 
+## API Ladder
+
+Choose the entry point that matches how much control you need:
+
+| Entry point | When to use |
+|-------------|------------|
+| `composeUserOps` | Default. You have smart accounts and want the SDK to handle user-op creation, signing, encoding, and submission. |
+| `composeUnpreparedUserOps` | You already called `createUserOp` yourself and want to compose the results. |
+| `composePreparedUserOps` | You have prepared (but unsigned) user ops and want a single shared signer across chains. |
+| `composeSignedUserOps` | You have already signed canonical user ops and only need the build + send path. |
+| `composeBridgeTransfer` | You are executing a coordinated bridge flow with paired source and destination smart accounts. |
+| `encodeXtMessage` | Backend / private-key flow. You have signed raw transactions and only need to build the `eth_sendXTransaction` payload. |
+
 ## API Reference
 
 ### `createEtheraConfig`
@@ -708,6 +721,50 @@ function useSmartAccount({
 - `isError`: Boolean indicating if an error occurred
 
 **Note:** The hook automatically enables/disables based on wallet connection status.
+
+#### `useSmartAccounts`
+
+Batch hook to create smart accounts for multiple chains simultaneously. Built on React Query `useQueries`.
+
+```typescript
+import { useSmartAccounts } from '@ssv-labs/ethera-sdk/react';
+
+function useSmartAccounts({
+  chainIds,
+  multiChainIds
+}: {
+  chainIds: number[];
+  multiChainIds?: number[];
+}): {
+  accounts: Record<number, UseQueryResult<SmartAccountResult>>;
+  isLoading: boolean;
+  isError: boolean;
+  errors: unknown[];
+};
+```
+
+**Parameters:**
+
+- `chainIds`: Array of chain IDs to create smart accounts for
+- `multiChainIds`: Optional array of chain IDs for multi-chain validator scope. Defaults to `chainIds`.
+
+**Returns:**
+
+- `accounts`: Chain-keyed map of React Query results, one per requested chain ID
+- `isLoading`: `true` if any chain's account is still loading
+- `isError`: `true` if any chain's account failed
+- `errors`: Array of errors from all failed chains
+
+```tsx
+const { accounts, isLoading, isError } = useSmartAccounts({
+  chainIds: [rollupA.id, rollupB.id]
+});
+
+const smartAccountA = accounts[rollupA.id].data;
+const smartAccountB = accounts[rollupB.id].data;
+```
+
+**Note:** Prefer `useSmartAccounts` over multiple `useSmartAccount` calls when composing operations across a known set of chains — it shares the same multi-chain validator scope and avoids independent query key drift.
 
 ### Helper Functions
 
@@ -955,6 +1012,19 @@ The SDK includes predefined chain configurations:
 - `rollupB` (Chain ID: 666666)
 
 You can also use custom chains by defining them with viem's `defineChain`.
+
+#### Custom Chain Onboarding Checklist
+
+When adding a chain that is not predefined in the SDK:
+
+- [ ] **Define the chain** with `defineChain` from viem, including correct `id`, `rpcUrls`, and `blockExplorers`.
+- [ ] **Deploy or locate the AA contracts** (`kernelImpl`, `kernelFactory`, `multichainValidator`) on the target chain.
+- [ ] **Register the contracts** in `accountAbstractionContracts` under the new chain ID when calling `createEtheraConfig`.
+- [ ] **Set an entry point** via `entryPoints` if the chain uses a non-default EntryPoint address (default is EntryPoint 0.7).
+- [ ] **Configure a paymaster** by returning an endpoint from `getPaymasterEndpoint` for the new chain ID, or accept that operations will not be sponsored on that chain.
+- [ ] **Add the chain to wagmi config** and ensure a public client is available for it.
+- [ ] **Include the chain ID in `multiChainIds`** when calling `createSmartAccount` or the `useSmartAccount` / `useSmartAccounts` hooks — all chains in a multi-chain session must share the same validator scope.
+- [ ] **Test account creation** on the new chain independently before composing cross-chain operations with it.
 
 ## Advanced Usage
 
