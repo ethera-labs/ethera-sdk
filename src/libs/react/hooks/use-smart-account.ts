@@ -9,6 +9,8 @@ type Props = {
   chainId: number;
   multiChainIds?: number[];
 };
+// multiChainIds controls stub-signature Merkle tree size for gas estimation only — not account address.
+// Default [] produces a 1-leaf tree. For multi-chain compose pass all chain IDs explicitly.
 export const useSmartAccount = ({ chainId, multiChainIds = [] }: Props) => {
   const account = useAccount();
   const etheraConfig = useEtheraConfig();

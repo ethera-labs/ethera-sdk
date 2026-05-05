@@ -899,7 +899,7 @@ describe('structured error wrapping', () => {
       expect.objectContaining<Partial<EtheraError>>({
         code: 'COMPOSE_BUILD_FAILURE',
         cause: rootCause,
-        details: expect.objectContaining({ method: 'composeSignedUserOps', operationIndex: 0, chainId: 1 })
+        details: expect.objectContaining({ method: 'composeSignedUserOpsInternal', operationIndex: 0, chainId: 1 })
       })
     );
   });

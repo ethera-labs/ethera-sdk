@@ -722,6 +722,8 @@ function useSmartAccount({
 
 **Note:** The hook automatically enables/disables based on wallet connection status.
 
+**Gas estimation note:** `multiChainIds` controls the Merkle tree size used in the stub signature during gas estimation — it does not affect the account address. `useSmartAccount` defaults to `[]` (1-leaf tree), `useSmartAccounts` defaults to `chainIds` (N-leaf tree matching the compose set). For accurate gas estimation in a multi-chain compose, pass `multiChainIds` explicitly with all chains involved in the session.
+
 #### `useSmartAccounts`
 
 Batch hook to create smart accounts for multiple chains simultaneously. Built on React Query `useQueries`.
@@ -746,7 +748,7 @@ function useSmartAccounts({
 **Parameters:**
 
 - `chainIds`: Array of chain IDs to create smart accounts for
-- `multiChainIds`: Optional array of chain IDs for multi-chain validator scope. Defaults to `chainIds`.
+- `multiChainIds`: Optional array of chain IDs for multi-chain stub signature sizing. Defaults to `[]`. Pass all chains in the compose session for accurate gas estimation.
 
 **Returns:**
 
@@ -1023,17 +1025,17 @@ When adding a chain that is not predefined in the SDK:
 - [ ] **Set an entry point** via `entryPoints` if the chain uses a non-default EntryPoint address (default is EntryPoint 0.7).
 - [ ] **Configure a paymaster** by returning an endpoint from `getPaymasterEndpoint` for the new chain ID, or accept that operations will not be sponsored on that chain.
 - [ ] **Add the chain to wagmi config** and ensure a public client is available for it.
-- [ ] **Include the chain ID in `multiChainIds`** when calling `createSmartAccount` or the `useSmartAccount` / `useSmartAccounts` hooks — all chains in a multi-chain session must share the same validator scope.
+- [ ] **Include all session chain IDs in `multiChainIds`** when calling `createSmartAccount` or the `useSmartAccount` / `useSmartAccounts` hooks — this sizes the stub signature Merkle tree correctly for gas estimation across all chains in the compose session.
 - [ ] **Test account creation** on the new chain independently before composing cross-chain operations with it.
 
 ## Advanced Usage
 
 ### Multi-Chain Validator Setup
 
-When using `useSmartAccount` with multiple chains, ensure all chains share the same multi-chain validator configuration:
+`multiChainIds` sets the Merkle tree size used in the stub signature during gas estimation. It does not affect the account address. For accurate gas estimation, pass all chains involved in the compose session:
 
 ```typescript
-// Both hooks should use the same multiChainIds array
+// Pass all chains in the session so the stub signature matches the final Merkle tree size
 const { data: accountA } = useSmartAccount({
   chainId: rollupA.id,
   multiChainIds: [rollupA.id, rollupB.id]
@@ -1043,8 +1045,6 @@ const { data: accountB } = useSmartAccount({
   chainId: rollupB.id,
   multiChainIds: [rollupA.id, rollupB.id]
 });
-
-// Both accounts will have the same address
 ```
 
 ### Gas Estimation

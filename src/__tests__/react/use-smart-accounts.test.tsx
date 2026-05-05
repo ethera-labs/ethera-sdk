@@ -60,7 +60,7 @@ describe('useSmartAccounts', () => {
     expect(result.current.errors).toHaveLength(0);
   });
 
-  it('defaults multiChainIds to chainIds when not provided', async () => {
+  it('defaults multiChainIds to [] when not provided', async () => {
     vi.mocked(useAccount).mockReturnValue({ isConnected: true } as never);
     vi.mocked(useWalletClient).mockReturnValue({ data: walletClient } as never);
     vi.mocked(createSmartAccount).mockResolvedValue({} as never);
@@ -70,7 +70,7 @@ describe('useSmartAccounts', () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     expect(createSmartAccount).toHaveBeenCalledWith(
-      { signer: walletClient, chainId: 1, multiChainIds: [1, 2] },
+      { signer: walletClient, chainId: 1, multiChainIds: [] },
       config
     );
   });

@@ -10,16 +10,14 @@ type Props = {
   multiChainIds?: number[];
 };
 
-export const useSmartAccounts = ({ chainIds, multiChainIds }: Props) => {
+export const useSmartAccounts = ({ chainIds, multiChainIds = [] }: Props) => {
   const account = useAccount();
   const etheraConfig = useEtheraConfig();
   const walletClient = useWalletClient();
 
-  const resolvedMultiChainIds = multiChainIds ?? chainIds;
-
   const results = useQueries({
     queries: chainIds.map((chainId) => ({
-      queryKey: ['smart-account', walletClient.data?.account.address, chainId, resolvedMultiChainIds],
+      queryKey: ['smart-account', walletClient.data?.account.address, chainId, multiChainIds],
       queryFn: async () => {
         if (!walletClient.data) {
           throw new EtheraError('WALLET_CLIENT_NOT_AVAILABLE', `Wallet client not available for chain ${chainId}.`, {
@@ -28,7 +26,7 @@ export const useSmartAccounts = ({ chainIds, multiChainIds }: Props) => {
         }
 
         return createSmartAccount(
-          { signer: walletClient.data, chainId, multiChainIds: resolvedMultiChainIds },
+          { signer: walletClient.data, chainId, multiChainIds: multiChainIds },
           etheraConfig
         );
       },

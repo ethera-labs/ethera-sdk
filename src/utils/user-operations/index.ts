@@ -281,7 +281,7 @@ const composeSignedUserOpsInternal = async (
           throw new EtheraError(
             'COMPOSE_BUILD_FAILURE',
             `compose_buildSignedUserOpsTx failed for operation ${operationIndex}.`,
-            { cause, details: { method: 'composeSignedUserOps', operationIndex, chainId: operation.publicClient.chain!.id } }
+            { cause, details: { method: 'composeSignedUserOpsInternal', operationIndex, chainId: operation.publicClient.chain!.id } }
           );
         })
     )
@@ -311,7 +311,7 @@ const composeSignedUserOpsInternal = async (
   } catch (cause) {
     throw new EtheraError('PAYLOAD_ENCODING_FAILURE', 'Failed to encode XT payload.', {
       cause,
-      details: { method: 'composeSignedUserOps' }
+      details: { method: 'composeSignedUserOpsInternal' }
     });
   }
 
@@ -332,7 +332,7 @@ const composeSignedUserOpsInternal = async (
       } catch (cause) {
         throw new EtheraError('SEND_FAILURE', 'eth_sendXTransaction failed.', {
           cause,
-          details: { method: 'composeUserOps' }
+          details: { method: 'composeSignedUserOpsInternal' }
         });
       }
 
@@ -377,15 +377,19 @@ const composeUnpreparedUserOpsInternal = async (
 ) => {
   assertOperationsNotEmpty(operations, 'composeUnpreparedUserOps');
 
-  const signedCanonicalOps = await prepareAndSignUserOperations(
-    operations.map((operation) => operation.publicClient as Client<Transport, Chain, SmartAccount>),
-    operations.map((operation) => operation.userOp)
-  ).then((ops) => ops.map(toRpcUserOpCanonical)).catch((cause: unknown) => {
+  let signed: Awaited<ReturnType<typeof prepareAndSignUserOperations>>;
+  try {
+    signed = await prepareAndSignUserOperations(
+      operations.map((operation) => operation.publicClient as Client<Transport, Chain, SmartAccount>),
+      operations.map((operation) => operation.userOp)
+    );
+  } catch (cause) {
     throw new EtheraError('SIGNING_FAILURE', 'Failed to sign user operations.', {
       cause,
       details: { method: 'composeUnpreparedUserOps' }
     });
-  });
+  }
+  const signedCanonicalOps = signed.map(toRpcUserOpCanonical);
 
   signedCanonicalOps.forEach((signedUserOp, operationIndex) => {
     options.onSign?.({
@@ -417,15 +421,19 @@ const composePreparedUserOpsInternal = async (
   const sourcePublicClient = operations[0].publicClient;
   const sourceKernelAccount = operations[0].account;
 
-  const signedCanonicalOps = await signUserOperations(sourcePublicClient, {
-    userOperations: unsignedUserOps,
-    account: sourceKernelAccount
-  }).then((ops) => ops.map(toRpcUserOpCanonical)).catch((cause: unknown) => {
+  let signed: Awaited<ReturnType<typeof signUserOperations>>;
+  try {
+    signed = await signUserOperations(sourcePublicClient, {
+      userOperations: unsignedUserOps,
+      account: sourceKernelAccount
+    });
+  } catch (cause) {
     throw new EtheraError('SIGNING_FAILURE', 'Failed to sign user operations.', {
       cause,
       details: { method: 'composePreparedUserOps' }
     });
-  });
+  }
+  const signedCanonicalOps = signed.map(toRpcUserOpCanonical);
 
   signedCanonicalOps.forEach((signedUserOp, operationIndex) => {
     options.onSign?.({
