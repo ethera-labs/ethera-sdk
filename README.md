@@ -33,10 +33,12 @@ The Ethera SDK is a **React-first** TypeScript library for Account Abstraction (
 ```bash
 # Using npm
 npm install @ssv-labs/ethera-sdk
-
+```
+```bash
 # Using yarn
 yarn add @ssv-labs/ethera-sdk
-
+```
+```bash
 # Using pnpm
 pnpm add @ssv-labs/ethera-sdk
 ```

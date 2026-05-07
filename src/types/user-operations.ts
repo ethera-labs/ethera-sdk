@@ -4,8 +4,7 @@ import type { CanonicalUserOp, ComposedSignedUserOpsTxReturnType } from '@/types
 import type { SignUserOperationsRequest } from '@zerodev/multi-chain-ecdsa-validator';
 import type { CreateKernelAccountReturnType } from '@zerodev/sdk';
 import type { Signer } from '@zerodev/sdk/types';
-import type { Chain, PublicClient, Transport } from 'viem';
-import type { Address, Hex, TransactionReceipt } from 'viem';
+import type { Address, Chain, Hex, PublicClient, TransactionReceipt, Transport } from 'viem';
 import type { PaymasterActions, SmartAccount } from 'viem/account-abstraction';
 
 export type EtheraPublicClient = PublicClient<Transport, Chain, SmartAccount, EtheraRpcSchema>;
