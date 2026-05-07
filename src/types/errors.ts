@@ -15,6 +15,7 @@ export type EtheraErrorCode =
   | 'SEND_FAILURE'
   | 'SIGNING_FAILURE'
   | 'SMART_ACCOUNT_INVALID'
+  | 'UNIVERSAL_BRIDGE_TOKEN_RESOLUTION_FAILED'
   | 'WALLET_CLIENT_NOT_AVAILABLE';
 
 export type EtheraErrorDetails = {

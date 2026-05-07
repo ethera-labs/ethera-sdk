@@ -1,8 +1,18 @@
 import { EtheraError } from '@/errors';
-import type { ComposableSmartAccount, EtheraPublicClient, UserOpCall, UserOpsOptions, UserOpsParams } from '@/types';
+import type {
+  AllowancePolicy,
+  BridgeReceiveParams,
+  BridgeSendParams,
+  ComposableSmartAccount,
+  ComposeBridgeTransferParams,
+  EtheraPublicClient,
+  UserOpCall,
+  UserOpsOptions,
+  UserOpsParams
+} from '@/types';
 import { createAbiEncoder } from '@/utils/abi';
 import { composeUserOps } from '@/utils/user-operations';
-import { type Address, erc20Abi, type Hex, maxUint256 } from 'viem';
+import { type Address, erc20Abi, maxUint256 } from 'viem';
 
 const erc20 = createAbiEncoder(erc20Abi);
 
@@ -60,79 +70,20 @@ const wrappedNativeAbi = [
 const bridge = createAbiEncoder(bridgeAbi);
 const wrappedNative = createAbiEncoder(wrappedNativeAbi);
 
-export type AllowancePolicy =
-  | { strategy: 'exact' }
-  | { strategy: 'max' }
-  | { strategy: 'none' }
-  | { strategy: 'custom'; amount: bigint };
-
-export type BridgeSendParams = {
-  otherChainId: bigint;
-  token: Address;
-  sender: Address;
-  receiver: Address;
-  amount: bigint;
-  sessionId: bigint;
-  destBridge: Address;
-};
-
-export type BridgeReceiveParams = {
-  otherChainId: bigint;
-  sender: Address;
-  receiver: Address;
-  sessionId: bigint;
-  srcBridge: Address;
-};
-
-// Swap the encoding for contracts that share the same call semantics but use a
-// different ABI. For bridges with extra parameters (fees, adapter options, chain
-// selectors) the parameter set itself differs — use composeUserOps directly.
-export type BridgeConfig = {
-  encodeSend?: (params: BridgeSendParams) => Hex;
-  encodeReceiveTokens?: (params: BridgeReceiveParams) => Hex;
-};
-
-type BridgeTransferBase = {
-  sourceSmartAccount: ComposableSmartAccount;
-  destinationSmartAccount: ComposableSmartAccount;
-  sourceBridge: Address;
-  destinationBridge: Address;
-  sessionId: bigint;
-  recipient?: Address;
-  bridgeConfig?: BridgeConfig;
-};
-
-type Erc20BridgeTransfer = BridgeTransferBase & {
-  asset: {
-    kind: 'erc20';
-    token: Address;
-    amount: bigint;
-    sourceOwner?: Address;
-    allowancePolicy?: AllowancePolicy;
-  };
-};
-
-type NativeBridgeTransfer = BridgeTransferBase & {
-  asset: {
-    kind: 'native';
-    amount: bigint;
-    wrappedToken: Address;
-    allowancePolicy?: AllowancePolicy;
-  };
-};
-
-export type ComposeBridgeTransferParams = Erc20BridgeTransfer | NativeBridgeTransfer;
-
-const getSmartAccountDetails = (smartAccount: ComposableSmartAccount, role: 'source' | 'destination') => {
+export const getSmartAccountDetails = (
+  smartAccount: ComposableSmartAccount,
+  role: 'source' | 'destination',
+  method = 'composeBridgeTransfer'
+) => {
   const chainId = smartAccount.publicClient.chain?.id;
   const accountAddress = smartAccount.account.address;
 
   if (!chainId || !accountAddress) {
     throw new EtheraError(
       'SMART_ACCOUNT_INVALID',
-      `composeBridgeTransfer requires ${role} smart accounts with chain-aware public clients and account addresses.`,
+      `${method} requires ${role} smart accounts with chain-aware public clients and account addresses.`,
       {
-        details: { method: 'composeBridgeTransfer', chainId }
+        details: { method, chainId }
       }
     );
   }
@@ -153,7 +104,7 @@ const resolveApprovalAmount = (policy: AllowancePolicy, transferAmount: bigint):
   }
 };
 
-const buildAllowanceCall = async (
+export const buildAllowanceCall = async (
   policy: AllowancePolicy,
   token: Address,
   owner: Address,
@@ -255,7 +206,7 @@ export const createBridgeTransferOperations = async (params: ComposeBridgeTransf
       })
     });
 
-    if (recipient !== destination.accountAddress) {
+    if (recipient.toLowerCase() !== destination.accountAddress.toLowerCase()) {
       destinationCalls.push({
         to: params.asset.token,
         value: 0n,
@@ -302,7 +253,7 @@ export const createBridgeTransferOperations = async (params: ComposeBridgeTransf
       data: wrappedNative.withdraw({ wad: params.asset.amount })
     });
 
-    if (recipient !== destination.accountAddress) {
+    if (recipient.toLowerCase() !== destination.accountAddress.toLowerCase()) {
       destinationCalls.push({
         to: recipient,
         value: params.asset.amount,
