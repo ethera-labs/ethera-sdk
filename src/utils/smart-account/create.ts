@@ -1,6 +1,8 @@
 import { getAccountAbstractionContractsForChain } from '@/config/account-abstraction';
-import type { CreateSmartAccountReturnType, EtheraConfigReturnType } from '@/types';
 import type {
+  CreateSmartAccountReturnType,
+  EtheraConfigReturnType,
+  GasOverrides,
   SmartAccountUserOp,
   UserOpCall
 } from '@/types';
@@ -42,12 +44,12 @@ export const createSmartAccount = async (
     useMetaFactory: false
   });
   const boundCreateUserOps = createUserOps.bind(null, config, kernelAccount);
-  const createUserOp = async (calls: UserOpCall[]): Promise<SmartAccountUserOp> => ({
+  const createUserOp = async (calls: UserOpCall[], gasOptions?: GasOverrides): Promise<SmartAccountUserOp> => ({
     account: kernelAccount,
     signer,
     chainId,
     publicClient,
-    userOp: await boundCreateUserOps(calls)
+    userOp: await boundCreateUserOps(calls, gasOptions)
   });
 
   return {

@@ -8,6 +8,7 @@ import type {
   ComposedUserOpsResult,
   EtheraConfigReturnType,
   EtheraPublicClient,
+  GasOverrides,
   PreparedUserOps,
   SignedUserOps,
   UnpreparedUserOps,
@@ -494,7 +495,8 @@ export const validateComposePlan = (
 export const createUserOps = async (
   config: EtheraConfigReturnType,
   account: CreateKernelAccountReturnType<'0.7'>,
-  calls: UserOpCall[]
+  calls: UserOpCall[],
+  gasOptions?: GasOverrides
 ) => {
   assertCallsNotEmpty(calls, 'createUserOps');
   const normalizedCalls = normalizeCalls(calls);
@@ -507,6 +509,8 @@ export const createUserOps = async (
     });
   }
 
+  const multiplierPct = gasOptions?.callGasMultiplierPct ?? 25n;
+
   const callGasEstimates = await Promise.all(
     normalizedCalls.map((call) =>
       publicClient
@@ -516,7 +520,7 @@ export const createUserOps = async (
           data: call.data,
           value: call.value
         })
-        .then(withMargin)
+        .then((gas) => withMargin(gas, multiplierPct))
         .catch((error: Error) => {
           console.warn(
             `Gas estimation failed for call to ${call.to}, falling back`,
@@ -527,11 +531,15 @@ export const createUserOps = async (
     )
   );
 
-  const callGasLimit = callGasEstimates.reduce((acc, gas) => acc + gas, 0n);
-  const verificationGasLimit =
-    callGasLimit + PRE_VERIFICATION_GAS > MIN_VERIFICATION_GAS_LIMIT
-      ? callGasLimit + PRE_VERIFICATION_GAS
+  const estimatedCallGasLimit = callGasEstimates.reduce((acc, gas) => acc + gas, 0n);
+  const estimatedVerificationGasLimit =
+    estimatedCallGasLimit + PRE_VERIFICATION_GAS > MIN_VERIFICATION_GAS_LIMIT
+      ? estimatedCallGasLimit + PRE_VERIFICATION_GAS
       : MIN_VERIFICATION_GAS_LIMIT;
+
+  const callGasLimit = gasOptions?.callGasLimit ?? estimatedCallGasLimit;
+  const verificationGasLimit = gasOptions?.verificationGasLimit ?? estimatedVerificationGasLimit;
+  const preVerificationGas = gasOptions?.preVerificationGas ?? PRE_VERIFICATION_GAS;
 
   const gasEstimate = await publicClient.estimateFeesPerGas();
 
@@ -562,7 +570,7 @@ export const createUserOps = async (
     callData,
     callGasLimit,
     verificationGasLimit,
-    preVerificationGas: PRE_VERIFICATION_GAS,
+    preVerificationGas,
     maxFeePerGas: gasEstimate.maxFeePerGas!,
     maxPriorityFeePerGas: gasEstimate.maxPriorityFeePerGas!,
     ...(paymaster ? { paymaster } : {})
