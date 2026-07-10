@@ -24,6 +24,23 @@ import type { Chain, Client, Transport } from 'viem';
 import { type Address, type Hex } from 'viem';
 import type { GetPaymasterDataParameters, PaymasterActions, SmartAccount } from 'viem/account-abstraction';
 
+/** Minimal JSON-RPC POST for endpoints that aren't the chain's viem transport (e.g. the bundler). */
+const jsonRpcRequest = async <T>(url: string, method: string, params: unknown): Promise<T> => {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params })
+  });
+  if (!response.ok) {
+    throw new Error(`${method} @ ${url} responded ${response.status}: ${await response.text()}`);
+  }
+  const body = (await response.json()) as { result?: T; error?: { code?: number; message?: string } };
+  if (body.error) {
+    throw new Error(`${method} @ ${url} error ${body.error.code}: ${body.error.message}`);
+  }
+  return body.result as T;
+};
+
 const FALLBACK_CALL_GAS_LIMIT = 900_000n;
 const MIN_VERIFICATION_GAS_LIMIT = 1_200_000n;
 const PRE_VERIFICATION_GAS = 90_000n;
@@ -271,21 +288,30 @@ const composeSignedUserOpsInternal = async (
 ): Promise<ComposedUserOpsResult> => {
   assertOperationsNotEmpty(operations, 'composeSignedUserOps');
 
+  const getBundlerUrl = options.config?.getBundlerUrl;
   const builds: ComposedSignedUserOpsTxReturnType[] = await Promise.all(
-    operations.map((operation, operationIndex) =>
-      operation.publicClient
-        .request({
-          method: 'compose_buildSignedUserOpsTx',
-          params: [[operation.signedCanonicalOps], { chainId: operation.publicClient.chain!.id }]
-        })
-        .catch((cause: unknown) => {
-          throw new EtheraError(
-            'COMPOSE_BUILD_FAILURE',
-            `compose_buildSignedUserOpsTx failed for operation ${operationIndex}.`,
-            { cause, details: { method: 'composeSignedUserOpsInternal', operationIndex, chainId: operation.publicClient.chain!.id } }
-          );
-        })
-    )
+    operations.map((operation, operationIndex) => {
+      const chainId = operation.publicClient.chain!.id;
+      const bundlerUrl = getBundlerUrl?.(chainId);
+      // Build via the dedicated bundler endpoint when configured (bundler is a
+      // separate service in the deployed topology); otherwise via publicClient.
+      const build = bundlerUrl
+        ? jsonRpcRequest<ComposedSignedUserOpsTxReturnType>(bundlerUrl, 'ethera_buildSignedUserOpsTx', [
+            [operation.signedCanonicalOps],
+            { chainId, submit: false }
+          ])
+        : operation.publicClient.request({
+            method: 'ethera_buildSignedUserOpsTx',
+            params: [[operation.signedCanonicalOps], { chainId, submit: false }]
+          });
+      return build.catch((cause: unknown) => {
+        throw new EtheraError(
+          'COMPOSE_BUILD_FAILURE',
+          `ethera_buildSignedUserOpsTx failed for operation ${operationIndex}.`,
+          { cause, details: { method: 'composeSignedUserOpsInternal', operationIndex, chainId } }
+        );
+      });
+    })
   );
 
   const operationMetadata = buildOperationMetadata(operations, descriptors, builds);
@@ -325,13 +351,31 @@ const composeSignedUserOpsInternal = async (
     explorerUrls,
     operations: operationMetadata,
     send: async () => {
+      const xtSubmissionUrl = options.config?.xtSubmissionUrl;
       try {
-        await operations[0].publicClient.request({
-          method: 'eth_sendXTransaction',
-          params: [payload]
-        });
+        if (xtSubmissionUrl) {
+          // Sidecar-style submission: POST the built raw legs as JSON to the XT endpoint.
+          const transactions: Record<string, string[]> = {};
+          builds.forEach((build, operationIndex) => {
+            const chainId = String(operations[operationIndex].publicClient.chain!.id);
+            (transactions[chainId] ??= []).push(build.raw);
+          });
+          const response = await fetch(xtSubmissionUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ transactions })
+          });
+          if (!response.ok) {
+            throw new Error(`XT endpoint responded ${response.status}: ${await response.text()}`);
+          }
+        } else {
+          await operations[0].publicClient.request({
+            method: 'eth_sendXTransaction',
+            params: [payload]
+          });
+        }
       } catch (cause) {
-        throw new EtheraError('SEND_FAILURE', 'eth_sendXTransaction failed.', {
+        throw new EtheraError('SEND_FAILURE', xtSubmissionUrl ? 'XT submission failed.' : 'eth_sendXTransaction failed.', {
           cause,
           details: { method: 'composeSignedUserOpsInternal' }
         });

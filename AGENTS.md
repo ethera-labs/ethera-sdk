@@ -7,5 +7,5 @@
 
 ## RPC Naming
 
-- The custom RPC method name is `compose_buildSignedUserOpsTx`.
-- Do not rename this RPC method to `ethera_buildSignedUserOpsTx` or other brand-based variants. Treat it as protocol/API surface, not branding.
+- The custom RPC method name is `ethera_buildSignedUserOpsTx` (served by the ethera-bundler).
+- Treat it as protocol/API surface, not branding: keep the name identical across the SDK, the bundler, and any gateway, and do not fork it into per-consumer variants.

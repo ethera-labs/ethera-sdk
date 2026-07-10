@@ -139,6 +139,12 @@ export type ComposedUserOpsResult = {
 };
 
 export type UserOpsOptions = {
+  /**
+   * Ethera config used to resolve submission preferences (e.g. `xtSubmissionUrl`).
+   * Optional for backwards compatibility; when omitted, `send()` falls back to the
+   * legacy `eth_sendXTransaction` RPC on the first operation's transport.
+   */
+  config?: Pick<EtheraConfigReturnType, 'xtSubmissionUrl' | 'getBundlerUrl'>;
   onBuild?: (payload: ComposeBuildCallbackPayload) => void;
   onSign?: (payload: ComposeSignCallbackPayload) => void;
   onSigned?: (signedOps: CanonicalUserOp[]) => void;

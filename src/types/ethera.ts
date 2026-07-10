@@ -7,8 +7,8 @@ export type EtheraRpcSchema = [
     ReturnType: null;
   },
   {
-    Method: 'compose_buildSignedUserOpsTx';
-    Parameters: [CanonicalUserOp[], { chainId: number }];
+    Method: 'ethera_buildSignedUserOpsTx';
+    Parameters: [CanonicalUserOp[], { chainId: number; submit?: boolean }];
     ReturnType: ComposedSignedUserOpsTxReturnType;
   }
 ];

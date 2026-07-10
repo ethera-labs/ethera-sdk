@@ -28,6 +28,8 @@ export function createEtheraConfig<TConfig extends Config>(
 
   return {
     getPaymasterEndpoint: props.getPaymasterEndpoint,
+    xtSubmissionUrl: props.xtSubmissionUrl,
+    getBundlerUrl: props.getBundlerUrl,
     getPublicClient: (chainId) => {
       const publicClient = getPublicClient(props.wagmi, { chainId }) as
         | PublicClient<Transport, Chain, SmartAccount, EtheraRpcSchema>
